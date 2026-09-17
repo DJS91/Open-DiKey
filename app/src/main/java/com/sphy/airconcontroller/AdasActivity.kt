@@ -7,7 +7,6 @@ import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.byd.BydAdasController
 import com.sphy.airconcontroller.storage.AdasCustomProfile
 import com.sphy.airconcontroller.storage.AdasEditMode
@@ -24,8 +23,6 @@ class AdasActivity : OpenDiKeyActivity() {
     private lateinit var statusText: TextView
     private lateinit var modeToggle: MaterialButtonToggleGroup
     private lateinit var applyButton: Button
-    private lateinit var applyOnBootRow: View
-    private lateinit var applyOnBootSwitch: SwitchMaterial
 
     private lateinit var elkaOff: Button
     private lateinit var elkaOn: Button
@@ -49,8 +46,6 @@ class AdasActivity : OpenDiKeyActivity() {
         statusText = findViewById(R.id.adasStatusText)
         modeToggle = findViewById(R.id.adasModeToggle)
         applyButton = findViewById(R.id.adasApplyButton)
-        applyOnBootRow = findViewById(R.id.adasApplyOnBootRow)
-        applyOnBootSwitch = findViewById(R.id.adasApplyOnBootSwitch)
         elkaOff = findViewById(R.id.adasElkaOffButton)
         elkaOn = findViewById(R.id.adasElkaOnButton)
         ldaOff = findViewById(R.id.adasLdaOffButton)
@@ -91,7 +86,6 @@ class AdasActivity : OpenDiKeyActivity() {
         dmsOff.setOnClickListener { onDms(false) }
         dmsOn.setOnClickListener { onDms(true) }
         applyButton.setOnClickListener { applyCustomProfile() }
-        applyOnBootSwitch.setOnCheckedChangeListener { _, checked -> settings.adasApplyOnBoot = checked }
     }
 
     override fun onStart() {
@@ -195,8 +189,6 @@ class AdasActivity : OpenDiKeyActivity() {
     private fun refresh() {
         val custom = isCustom()
         applyButton.visibility = if (custom) View.VISIBLE else View.GONE
-        applyOnBootRow.visibility = if (custom) View.VISIBLE else View.GONE
-        applyOnBootSwitch.isChecked = settings.adasApplyOnBoot
 
         if (custom) {
             statusText.text = getString(R.string.adas_subtitle_custom)
