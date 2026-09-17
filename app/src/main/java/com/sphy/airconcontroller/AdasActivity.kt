@@ -7,6 +7,7 @@ import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.byd.BydAdasController
 import com.sphy.airconcontroller.storage.AdasCustomProfile
 import com.sphy.airconcontroller.storage.AdasEditMode
@@ -23,6 +24,8 @@ class AdasActivity : OpenDiKeyActivity() {
     private lateinit var statusText: TextView
     private lateinit var modeToggle: MaterialButtonToggleGroup
     private lateinit var applyButton: Button
+    private lateinit var applyOnBootRow: View
+    private lateinit var applyOnBootSwitch: SwitchMaterial
 
     private lateinit var elkaOff: Button
     private lateinit var elkaOn: Button
@@ -46,6 +49,8 @@ class AdasActivity : OpenDiKeyActivity() {
         statusText = findViewById(R.id.adasStatusText)
         modeToggle = findViewById(R.id.adasModeToggle)
         applyButton = findViewById(R.id.adasApplyButton)
+        applyOnBootRow = findViewById(R.id.adasApplyOnBootRow)
+        applyOnBootSwitch = findViewById(R.id.adasApplyOnBootSwitch)
         elkaOff = findViewById(R.id.adasElkaOffButton)
         elkaOn = findViewById(R.id.adasElkaOnButton)
         ldaOff = findViewById(R.id.adasLdaOffButton)
@@ -86,6 +91,7 @@ class AdasActivity : OpenDiKeyActivity() {
         dmsOff.setOnClickListener { onDms(false) }
         dmsOn.setOnClickListener { onDms(true) }
         applyButton.setOnClickListener { applyCustomProfile() }
+        applyOnBootSwitch.setOnCheckedChangeListener { _, checked -> settings.adasApplyOnBoot = checked }
     }
 
     override fun onStart() {
@@ -163,19 +169,17 @@ class AdasActivity : OpenDiKeyActivity() {
 
     private fun applyCustomProfile() {
         val profile = settings.adasCustomProfile()
-        val lda = laneMode(profile.laneDeparture)
+        val labels = listOf(
+            getString(R.string.adas_elka_title),
+            getString(R.string.adas_lda_title),
+            getString(R.string.adas_aeb_title),
+            getString(R.string.adas_dms_title),
+        )
         lifecycleScope.launch {
             applyButton.isEnabled = false
-            val results = withContext(Dispatchers.IO) {
-                listOf(
-                    getString(R.string.adas_elka_title) to adas.setEmergencyLaneKeepAssist(profile.elka),
-                    getString(R.string.adas_lda_title) to adas.setLaneDepartureAssist(lda),
-                    getString(R.string.adas_aeb_title) to adas.setAutomaticEmergencyBraking(profile.aeb),
-                    getString(R.string.adas_dms_title) to adas.setDriverMonitoringCamera(profile.dms),
-                )
-            }
+            val results = withContext(Dispatchers.IO) { adas.applyCustomProfile(profile) }
             applyButton.isEnabled = true
-            val failed = results.filter { !it.second.success }
+            val failed = labels.zip(results).filter { !it.second.success }
             val message = if (failed.isEmpty()) {
                 getString(R.string.adas_apply_ok)
             } else {
@@ -191,6 +195,8 @@ class AdasActivity : OpenDiKeyActivity() {
     private fun refresh() {
         val custom = isCustom()
         applyButton.visibility = if (custom) View.VISIBLE else View.GONE
+        applyOnBootRow.visibility = if (custom) View.VISIBLE else View.GONE
+        applyOnBootSwitch.isChecked = settings.adasApplyOnBoot
 
         if (custom) {
             statusText.text = getString(R.string.adas_subtitle_custom)

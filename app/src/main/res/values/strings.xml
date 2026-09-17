@@ -147,6 +147,7 @@
   <string name="adas_apply">Apply</string>
   <string name="adas_apply_ok">Custom ADAS profile applied</string>
   <string name="adas_apply_partial">Some settings failed: %1$s</string>
+  <string name="adas_apply_on_boot">Apply automatically on app launch</string>
   <string name="adas_elka_title">Emergency lane keep assist</string>
   <string name="adas_lda_title">Lane departure assist</string>
   <string name="adas_lda_off">Off</string>
