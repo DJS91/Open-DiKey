@@ -25,6 +25,10 @@
     tools:ignore="ProtectedPermissions"
   />
   <uses-permission
+    android:name="android.permission.WRITE_SETTINGS"
+    tools:ignore="ProtectedPermissions"
+  />
+  <uses-permission
     android:name="android.permission.SYSTEM_ALERT_WINDOW"
     tools:ignore="SystemAlertWindowPermission" />
   <uses-permission
@@ -158,6 +162,16 @@
       android:name=".SentryActivity"
       android:exported="false"
       android:parentActivityName=".MainActivity"
+      android:theme="@style/Theme.OpenDiKey" />
+    <activity
+      android:name=".PetModeActivity"
+      android:exported="false"
+      android:parentActivityName=".MainActivity"
+      android:theme="@style/Theme.OpenDiKey" />
+    <activity
+      android:name=".PetModeConfigActivity"
+      android:exported="false"
+      android:parentActivityName=".PetModeActivity"
       android:theme="@style/Theme.OpenDiKey" />
     <activity
       android:name=".VehicleDumpActivity"

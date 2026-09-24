@@ -2,7 +2,7 @@
 
 Open-source Android app for the **DiKey** aftermarket center-console controller.
 
-Replaces the vendor app DiKey Smart Link (`迪铠智联`). Runs on DiLink 5 head units and drives climate controls through local BYD APIs.
+Replaces the vendor app DiKey Smart Link (`迪铠智联`). Runs on DiLink 5 head units, controls DiKey lighting and climate, and provides vehicle information, ADAS settings, Sentry integration, and Pet Mode through local BYD APIs.
 
 > **Note:** The commercial DiKey hardware is sold as _BYD Shark 6 DiKey Vehicle Intelligent Keys_ on [Alibaba](https://www.alibaba.com/product-detail/BYD-Shark-6-DiKey-Vehicle-Intelligent_1601923176905.html). Not affiliated with DiKey, BYD, or the seller. Use at your own risk.
 
@@ -57,9 +57,10 @@ Sideload the APK from the [latest release](https://github.com/sp-hy/Open-DiKey/r
 - Allow the hidden-API exemption (app restarts)
 - Plug the C3 board into the car's **USB-C port** (USB-A ports may not register)
 - If USB permission doesn't pop up, unplug and replug the board while staying in the app
+- If using the BLE connection instead, allow **Nearby devices / Bluetooth**
 - Allow Open DiKey in any DiLink **auto-start / run in background** menu if available
 
-After that, the listener starts automatically on reboot.
+Open DiKey once after each cold boot or deep sleep. A foreground listener then keeps the USB/BLE connection alive while the app is in the background (see [autostart.md](autostart.md)).
 
 ---
 
@@ -71,9 +72,17 @@ After that, the listener starts automatically on reboot.
 
 **Dials** — Left dial = passenger, right dial = driver. Click to switch between **temp** and **fan**, rotate to adjust.
 
+**Vehicle info** — Live dashboard for battery, range, fuel, driving data, tyre pressures, vehicle attitude, and head-unit resource usage.
+
+**ADAS** — View current driver-assistance settings or save and apply a custom ELKA, LDA, AEB, and DMS profile. Long-press the ADAS tile to configure automatic application when the app starts.
+
+**Sentry** — Install, update, and open the separate [Strike](https://github.com/sp-hy/Strike) sentry app.
+
+**Pet Mode** — Keeps the display awake and periodically enforces a configurable climate profile while the vehicle is **READY**. Fan speed, temperature, recirculation, and wind direction can be configured; the previous climate and brightness settings are restored on exit.
+
 **Background listener** — After you open Open DiKey, a foreground service keeps the USB/BLE DiKey link alive while the UI is in the background. Open the app once after power-on (see [autostart.md](autostart.md) for DiLink limitations).
 
-**In-app updates** — Settings → Check for updates pulls the latest `open-dikey.apk` from [GitHub Releases](https://github.com/sp-hy/Open-DiKey/releases).
+**In-app updates** — Home gear icon → **Check for updates** downloads the latest `open-dikey.apk` from [GitHub Releases](https://github.com/sp-hy/Open-DiKey/releases).
 
 ---
 
@@ -96,66 +105,38 @@ After that, the listener starts automatically on reboot.
 
 ## For developers
 
-### Release signing
-
-GitHub Actions builds a **signed release** APK (required for in-app updates). Create a keystore once and add **repository secrets**:
-
-```powershell
-# Windows
-.\scripts\create-release-keystore.ps1
-```
-
-```bash
-# macOS / Linux
-./scripts/create-release-keystore.sh
-```
-
-Then in the GitHub repo → **Settings → Secrets and variables → Actions → Repository secrets**, add:
-
-| Secret | Value |
-| ------ | ----- |
-| `SIGNING_KEYSTORE_BASE64` | Base64 of the `.jks` (printed by the script) |
-| `SIGNING_STORE_PASSWORD` | Keystore password |
-| `SIGNING_KEY_ALIAS` | Usually `open-dikey` |
-| `SIGNING_KEY_PASSWORD` | Key password |
-
-Keep the `.jks` and passwords offline — never commit them.
-
-**Migration note:** Older builds were debug-signed (and each CI runner used a different debug key). The first release-signed install may require uninstalling the old APK once; later updates install over the same signing key.
-
 ### Source structure
 
-| Path                           | Purpose             |
-| ------------------------------ | ------------------- |
-| `MainActivity.kt`              | Home screen         |
-| `ColorConfigActivity.kt`       | Ambient + backlight |
-| `ButtonMappingActivity.kt`     | Button config       |
-| `dikey/DiKeySession.kt`        | USB/BLE session     |
-| `dikey/DiKeyClimateMapper.kt`  | Climate controls    |
-| `dikey/DiKeyUpMapper.kt`       | App launcher        |
-| `usb/DiKeyUsbBridge.kt`        | USB serial          |
-| `boot/DiKeyListenService.kt`   | Background listener |
-| `adb/AdbPermissionManager.kt`  | Grants + hidden-API |
-| `byd/Dilink5SdkInjector.kt`    | OEM SDK loader      |
-| `byd/BydAcController.kt`       | Climate API         |
-| `firmware/src/DiKeyUsbBridge/` | C3 bridge firmware  |
+Android paths below are relative to `app/src/main/java/com/sphy/airconcontroller/`.
+
+| Path                              | Purpose                       |
+| --------------------------------- | ----------------------------- |
+| `MainActivity.kt`                 | Home screen                   |
+| `ColorConfigActivity.kt`          | Ambient + backlight           |
+| `ButtonMappingActivity.kt`        | Button config                 |
+| `VehicleInfoActivity.kt`          | Live vehicle dashboard        |
+| `AdasActivity.kt`                 | ADAS profiles                 |
+| `SentryActivity.kt`               | Strike installer and launcher |
+| `PetModeActivity.kt`              | Pet Mode runtime              |
+| `PetModeConfigActivity.kt`        | Pet Mode profile              |
+| `SettingsHubActivity.kt`          | Settings and app updates      |
+| `dikey/DiKeySession.kt`           | USB/BLE session               |
+| `dikey/DiKeyClimateMapper.kt`     | Climate controls              |
+| `dikey/DiKeyUpMapper.kt`          | App launcher                  |
+| `usb/DiKeyUsbBridge.kt`           | USB serial                    |
+| `boot/DiKeyListenService.kt`      | Background listener           |
+| `adb/AdbPermissionManager.kt`     | Grants + hidden-API           |
+| `byd/Dilink5SdkInjector.kt`       | OEM SDK loader                |
+| `byd/BydAcController.kt`          | Climate API                   |
+| `byd/BydAdasController.kt`        | ADAS API                      |
+| `byd/BydVehicleInfoController.kt` | Vehicle data API              |
+| `firmware/src/DiKeyUsbBridge/`    | C3 bridge firmware            |
 
 ### Assets
 
 - [`assets/Docs/vendor-re/PROTOCOL.md`](assets/Docs/vendor-re/PROTOCOL.md) — DiKey BLE/USB protocol
 - [`assets/Docs/Offline/`](assets/Docs/Offline/) — Offline docs portal
 - [`assets/BYD API/`](assets/BYD%20API/) — BYD Auto API V1.0.5
-
-### Roadmap
-
-- [x] Protocol mapping
-- [x] Colors + button config
-- [x] Climate + dials
-- [x] App launcher
-- [x] Boot listener
-- [x] More event types (long-press up/down)
-- [x] Sync button action
-- [x] Vehicle compatibility docs
 
 ---
 

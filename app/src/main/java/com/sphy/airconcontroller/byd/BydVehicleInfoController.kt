@@ -304,6 +304,31 @@ class BydVehicleInfoController(context: Context) {
         val brakePedalPct: Double?,
     )
 
+    data class ReadyState(
+        val energyMode: Int?,
+        val operationMode: Int?,
+        val powerLevel: Int?,
+        val engineRpm: Int?,
+    ) {
+        /** Confirmed live: 0 before brake + Start, 1 once the vehicle is READY. */
+        val isReady: Boolean?
+            get() = energyMode?.let { it > 0 }
+    }
+
+    /** Lightweight READY-state probe for Pet Mode. */
+    fun readReadyState(): ReadyState {
+        if (devices.isEmpty()) bind()
+        val energy = devices["Energy"]
+        val bodywork = devices["Bodywork"]
+        val engine = devices["Engine"]
+        return ReadyState(
+            energyMode = energy?.let { num(it, "getEnergyMode")?.toInt() },
+            operationMode = energy?.let { num(it, "getOperationMode")?.toInt() },
+            powerLevel = bodywork?.let { num(it, "getPowerLevel")?.toInt() },
+            engineRpm = engine?.let { num(it, "getEngineSpeed")?.toInt() },
+        )
+    }
+
     /** Lightweight speed/pedal read for a faster UI refresh loop. */
     fun readDriveLive(): DriveLive {
         if (devices.isEmpty()) bind()

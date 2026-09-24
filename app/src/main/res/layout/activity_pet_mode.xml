@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent"
+    android:orientation="vertical"
+    tools:context=".PetModeActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp">
+
+        <ImageButton
+            android:id="@+id/petBackButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/navigate_back"
+            android:padding="12dp"
+            android:src="@drawable/ic_arrow_back"
+            android:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/pet_mode_title"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/petSettingsButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/pet_mode_configure"
+            android:padding="12dp"
+            android:src="@drawable/ic_settings"
+            android:tint="@color/text_primary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="56dp"
+        android:paddingEnd="72dp"
+        android:paddingBottom="48dp">
+
+        <ImageView
+            android:id="@+id/petPawImage"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="64dp"
+            android:layout_weight="1"
+            android:alpha="0.28"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_pet_paw" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.25"
+            android:gravity="center_vertical"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/petOwnerMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/pet_mode_owner_message"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline3"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/petTemperatureLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
+                android:text="@string/pet_mode_temperature_label"
+                android:textColor="@color/text_primary"
+                android:textSize="24sp" />
+
+            <TextView
+                android:id="@+id/petTemperatureText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/text_primary"
+                android:textSize="104sp"
+                android:textStyle="bold"
+                tools:text="21°C" />
+
+            <TextView
+                android:id="@+id/petStatusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/pet_mode_starting"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                android:textColor="@color/text_muted" />
+
+            <TextView
+                android:id="@+id/petReadyWarningText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/pet_mode_vehicle_not_ready"
+                android:textColor="@color/accent_orange"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

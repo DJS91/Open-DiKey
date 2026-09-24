@@ -74,30 +74,35 @@
 
         <Space
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_height="12dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="2"
+            android:layout_weight="1"
             android:gravity="center"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
             <LinearLayout
-                android:id="@+id/homeColorsButton"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="12dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_feature_tile"
-                android:clickable="true"
-                android:contentDescription="@string/color_config_title"
-                android:clipToOutline="true"
-                android:focusable="true"
                 android:gravity="center"
-                android:orientation="vertical"
-                android:padding="28dp">
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/homeColorsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="12dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_feature_tile"
+                    android:clickable="true"
+                    android:contentDescription="@string/color_config_title"
+                    android:clipToOutline="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="28dp">
 
                 <ImageView
                     android:layout_width="80dp"
@@ -125,9 +130,9 @@
                     android:text="@string/color_home_subtitle"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                     android:textColor="@color/text_muted" />
-            </LinearLayout>
+                </LinearLayout>
 
-            <LinearLayout
+                <LinearLayout
                 android:id="@+id/homeButtonsButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -168,9 +173,9 @@
                     android:text="@string/button_mapping_home_subtitle"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                     android:textColor="@color/text_muted" />
-            </LinearLayout>
+                </LinearLayout>
 
-            <LinearLayout
+                <LinearLayout
                 android:id="@+id/homeVehicleInfoButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -211,9 +216,9 @@
                     android:text="@string/vehicle_info_home_subtitle"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                     android:textColor="@color/text_muted" />
-            </LinearLayout>
+                </LinearLayout>
 
-            <LinearLayout
+                <LinearLayout
                 android:id="@+id/homeAdasButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -254,9 +259,9 @@
                     android:text="@string/adas_home_subtitle"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                     android:textColor="@color/text_muted" />
-            </LinearLayout>
+                </LinearLayout>
 
-            <LinearLayout
+                <LinearLayout
                 android:id="@+id/homeSentryButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -296,12 +301,87 @@
                     android:text="@string/sentry_home_subtitle"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                     android:textColor="@color/text_muted" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/homePetModeButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="12dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_feature_tile"
+                    android:clickable="true"
+                    android:contentDescription="@string/pet_mode_title"
+                    android:clipToOutline="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="28dp">
+
+                    <ImageView
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:layout_marginBottom="16dp"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_pet_paw"
+                        android:tint="@color/accent_orange" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
+                        android:text="@string/pet_mode_title"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_horizontal"
+                        android:minLines="2"
+                        android:text="@string/pet_mode_home_subtitle"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                        android:textColor="@color/text_muted" />
+                </LinearLayout>
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_marginEnd="12dp"
+                    android:layout_weight="1" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_marginEnd="12dp"
+                    android:layout_weight="1" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_marginEnd="12dp"
+                    android:layout_weight="1" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
             </LinearLayout>
         </LinearLayout>
 
         <Space
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_height="12dp" />
     </LinearLayout>
 </LinearLayout>

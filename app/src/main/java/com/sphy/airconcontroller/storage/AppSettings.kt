@@ -28,6 +28,13 @@ data class AdasCustomProfile(
     val dms: Boolean = true,
 )
 
+data class PetModeProfile(
+    val fanLevel: Int = 3,
+    val temperatureC: Int = 21,
+    val recirculating: Boolean = true,
+    val windModeIndex: Int = 4,
+)
+
 data class LedRgb(val red: Int, val green: Int, val blue: Int) {
     fun clamped(): LedRgb = LedRgb(
         red.coerceIn(0, 255),
@@ -345,6 +352,22 @@ class AppSettings(context: Context) {
             prefs.edit().putBoolean(KEY_ADAS_APPLY_ON_BOOT, value).apply()
         }
 
+    fun petModeProfile(): PetModeProfile = PetModeProfile(
+        fanLevel = prefs.getInt(KEY_PET_FAN_LEVEL, 3).coerceIn(1, 7),
+        temperatureC = prefs.getInt(KEY_PET_TEMPERATURE, 21).coerceIn(17, 32),
+        recirculating = prefs.getBoolean(KEY_PET_RECIRCULATING, true),
+        windModeIndex = prefs.getInt(KEY_PET_WIND_MODE, 4).coerceIn(0, 4),
+    )
+
+    fun savePetModeProfile(profile: PetModeProfile) {
+        prefs.edit()
+            .putInt(KEY_PET_FAN_LEVEL, profile.fanLevel.coerceIn(1, 7))
+            .putInt(KEY_PET_TEMPERATURE, profile.temperatureC.coerceIn(17, 32))
+            .putBoolean(KEY_PET_RECIRCULATING, profile.recirculating)
+            .putInt(KEY_PET_WIND_MODE, profile.windModeIndex.coerceIn(0, 4))
+            .apply()
+    }
+
     fun lightingProfile(period: LightingPeriod): LightingProfile {
         ensureLightingProfiles()
         val key = if (period == LightingPeriod.DAY) KEY_PROFILE_DAY else KEY_PROFILE_NIGHT
@@ -510,5 +533,9 @@ class AppSettings(context: Context) {
         private const val KEY_ADAS_CUSTOM_AEB = "adas_custom_aeb"
         private const val KEY_ADAS_CUSTOM_DMS = "adas_custom_dms"
         private const val KEY_ADAS_APPLY_ON_BOOT = "adas_apply_on_boot"
+        private const val KEY_PET_FAN_LEVEL = "pet_fan_level"
+        private const val KEY_PET_TEMPERATURE = "pet_temperature"
+        private const val KEY_PET_RECIRCULATING = "pet_recirculating"
+        private const val KEY_PET_WIND_MODE = "pet_wind_mode"
     }
 }

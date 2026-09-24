@@ -76,6 +76,9 @@ class MainActivity : OpenDiKeyActivity() {
         findViewById<android.view.View>(R.id.homeSentryButton).setOnClickListener {
             startActivity(Intent(this, SentryActivity::class.java))
         }
+        findViewById<android.view.View>(R.id.homePetModeButton).setOnClickListener {
+            startActivity(Intent(this, PetModeActivity::class.java))
+        }
         findViewById<android.widget.ImageButton>(R.id.mainDebugButton).setOnClickListener {
             startActivity(Intent(this, DebugHubActivity::class.java))
         }

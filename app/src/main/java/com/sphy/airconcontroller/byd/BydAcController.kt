@@ -72,6 +72,7 @@ class BydAcController(context: Context) {
         val fanLevel: Int?,
         val controlMode: Int?,
         val cycleMode: Int?,
+        val windMode: Int?,
         val compressorMode: Int?,
         val maxCool: Boolean?,
         val ventilation: Boolean?,
@@ -97,6 +98,7 @@ class BydAcController(context: Context) {
                 appendLine("Mode: ${fmtControl(controlMode)}")
                 appendLine("Temp sync: ${fmtOnOff(tempSynced)}")
                 appendLine("Air: ${fmtCycle(cycleMode)}")
+                appendLine("Wind mode: ${windMode?.toString() ?: "—"}")
                 appendLine("Front demist: ${fmtOnOff(frontDefrost)}")
                 appendLine("Rear window and mirrors: ${fmtOnOff(rearDefrost)}")
                 appendLine("Air-only: ${fmtOnOff(ventilation)}")
@@ -163,6 +165,7 @@ class BydAcController(context: Context) {
             fanLevel = lastSetFanLevel ?: getInt("getAcWindLevel"),
             controlMode = getInt("getAcControlMode"),
             cycleMode = getInt("getAcCycleMode") ?: lastSetCycleMode,
+            windMode = getInt("getAcWindMode") ?: lastSetWindMode,
             compressorMode = getInt("getAcCompressorMode"),
             maxCool = intToBool(getInt("getAcMaxCoolingState")),
             ventilation = lastSetVentilation ?: intToBool(getInt("getAcVentilationState")),
@@ -172,23 +175,36 @@ class BydAcController(context: Context) {
         )
     }
 
-    fun start(): CommandResult {
-        if (!ensureDevice()) return notBound()
-        return firstSuccess(
-            { call("start", 0) },
-            { call("start", 1) },
-            { call("setAcStartState", AC_POWER_ON) },
-            { call("setAcStartState", AC_POWER_ON, 0) },
-        )
-    }
+    fun start(): CommandResult = setPower(true)
 
-    fun stop(): CommandResult {
+    fun stop(): CommandResult = setPower(false)
+
+    private fun setPower(enabled: Boolean): CommandResult {
         if (!ensureDevice()) return notBound()
-        return firstSuccess(
-            { call("stop", 0) },
-            { call("stop", 1) },
-            { call("setAcStartState", AC_POWER_OFF) },
-            { call("setAcStartState", AC_POWER_OFF, 0) },
+        val target = if (enabled) AC_POWER_ON else AC_POWER_OFF
+        val method = if (enabled) "start" else "stop"
+        val canReadBack = getInt("getAcStartState") != null
+        val attempts = listOf(
+            { call("setAcStartState", target) },
+            { call("setAcStartState", target, SOURCE_UI) },
+            { call(method, SOURCE_UI) },
+            { call(method, SOURCE_VOICE) },
+        )
+        var last = notBound()
+        for (attempt in attempts) {
+            val result = attempt()
+            if (result.success) {
+                if (!canReadBack) return result
+                repeat(3) {
+                    pauseForEcu()
+                    if (intToBool(getInt("getAcStartState")) == enabled) return result
+                }
+            }
+            if (result.detail != "no such method") last = result
+        }
+        return last.copy(
+            success = false,
+            detail = if (canReadBack) "power state did not change" else last.detail,
         )
     }
 
@@ -389,12 +405,50 @@ class BydAcController(context: Context) {
             fresh -> recirc
             else -> if (before == CYCLE_RECIRC) fresh else recirc
         }
+        Log.i(TAG, "toggleRecirc before=$before recirc=$recirc fresh=$fresh primary=$primary")
         val targets = listOf(primary, 0, 1, 2).distinct().filter { it != before }
         var last = notBound()
         for (target in targets) {
             val result = setCycleMode(target, before)
+            Log.i(TAG, "toggleRecirc target=$target success=${result.success} ${result.method} ${result.detail}")
             if (result.success) return result
             last = result
+        }
+        return last
+    }
+
+    fun setRecirculating(enabled: Boolean): CommandResult {
+        if (!ensureDevice()) return notBound()
+        var last = notBound()
+        repeat(PET_CYCLE_RETRIES) { retry ->
+            val before = getInt("getAcCycleMode") ?: lastSetCycleMode
+            val currentlyRecirculating = when (before) {
+                1 -> true
+                0, 2 -> false
+                else -> null
+            }
+            Log.i(
+                TAG,
+                "setRecirculating target=$enabled retry=$retry before=$before " +
+                    "interpreted=$currentlyRecirculating"
+            )
+            if (currentlyRecirculating == enabled) {
+                return CommandResult(
+                    success = true,
+                    method = "getAcCycleMode",
+                    raw = before,
+                    detail = "confirmed ${if (enabled) "recirculating" else "fresh air"}",
+                )
+            }
+            last = if (currentlyRecirculating != null) {
+                // Use the same proven command as the mapped/debug button, but
+                // retry while the ECU is busy applying the rest of the profile.
+                toggleRecirc()
+            } else {
+                setCycleMode(cycleValue(recirc = enabled), before)
+            }
+            if (last.success) return last
+            pauseForEcu(PET_CYCLE_RETRY_MS)
         }
         return last
     }
@@ -420,21 +474,32 @@ class BydAcController(context: Context) {
             { v -> call("setAcCycleMode", v) },
         )
         var last = notBound()
-        for (attempt in attempts) {
+        for ((index, attempt) in attempts.withIndex()) {
             val result = attempt(mode)
-            if (result.success && cycleReadback(mode, before)) {
+            val readbackMatches = result.success && cycleReadback(mode, before)
+            Log.i(
+                TAG,
+                "setCycleMode mode=$mode attempt=$index success=${result.success} " +
+                    "readbackMatches=$readbackMatches method=${result.method} detail=${result.detail}"
+            )
+            if (readbackMatches) {
                 cycleSetter = attempt
                 lastSetCycleMode = mode
                 return result
             }
             if (result.detail != "no such method") last = result
         }
-        return last
+        return last.copy(
+            success = false,
+            detail = "cycle state did not change",
+        )
     }
 
     private fun cycleReadback(target: Int, @Suppress("UNUSED_PARAMETER") before: Int?): Boolean {
         pauseForEcu()
-        return getInt("getAcCycleMode") == target
+        val after = getInt("getAcCycleMode")
+        Log.i(TAG, "cycleReadback target=$target before=$before after=$after")
+        return after == target
     }
 
     fun toggleFrontDefrost(): CommandResult = toggleWindshieldDefrost()
@@ -562,13 +627,41 @@ class BydAcController(context: Context) {
     /** Compressor A/C, distinct from climate power and air-only/ventilation. */
     fun toggleCompressor(): CommandResult {
         if (!ensureDevice()) return notBound()
-        val current = getInt("getAcCompressorMode") ?: 1
-        val next = if (current == 1) 0 else 1
-        return firstSuccess(
-            { call("setAcCompressorMode", SOURCE_VOICE, next) },
-            { call("setAcCompressorMode", SOURCE_UI, next) },
-            { call("setAcCompressorMode", next, SOURCE_VOICE) },
-            { call("setAcCompressorMode", next) },
+        val currentlyEnabled = getInt("getAcCompressorMode") == COMPRESSOR_ON
+        return setCompressorEnabled(!currentlyEnabled)
+    }
+
+    fun setCompressorEnabled(enabled: Boolean): CommandResult =
+        setCompressorMode(if (enabled) COMPRESSOR_ON else COMPRESSOR_OFF)
+
+    private fun setCompressorMode(mode: Int): CommandResult {
+        if (!ensureDevice()) return notBound()
+        val before = getInt("getAcCompressorMode")
+        if (before == mode) {
+            return CommandResult(
+                success = true,
+                method = "getAcCompressorMode",
+                raw = before,
+                detail = "already ${if (mode == COMPRESSOR_ON) "on" else "off"}",
+            )
+        }
+        val attempts = listOf(
+            { call("setAcCompressorMode", SOURCE_VOICE, mode) },
+            { call("setAcCompressorMode", SOURCE_UI, mode) },
+            { call("setAcCompressorMode", mode, SOURCE_VOICE) },
+            { call("setAcCompressorMode", mode) },
+        )
+        var last = notBound()
+        for (attempt in attempts) {
+            val result = attempt()
+            pauseForEcu()
+            val after = getInt("getAcCompressorMode")
+            if (result.success && (after == mode || after == null)) return result
+            if (result.detail != "no such method") last = result
+        }
+        return last.copy(
+            success = false,
+            detail = "compressor state did not change",
         )
     }
 
@@ -587,37 +680,105 @@ class BydAcController(context: Context) {
         val modes = windDirectionCycle()
         val idx = modes.indexOf(current)
         val next = modes[(if (idx < 0) 0 else idx + 1) % modes.size]
+        return setWindMode(next)
+    }
+
+    fun setWindMode(mode: Int): CommandResult {
+        if (!ensureDevice()) return notBound()
         val result = firstSuccess(
-            { call("setAcWindMode", SOURCE_VOICE, next) },
-            { call("setAcWindMode", SOURCE_UI, next) },
-            { call("setAcWindMode", next, SOURCE_VOICE) },
-            { call("setAcWindMode", next) },
+            { call("setAcWindMode", SOURCE_VOICE, mode) },
+            { call("setAcWindMode", SOURCE_UI, mode) },
+            { call("setAcWindMode", mode, SOURCE_VOICE) },
+            { call("setAcWindMode", mode) },
         )
         if (result.success) {
-            lastSetWindMode = next
+            lastSetWindMode = mode
             pauseForEcu()
         }
         return result
     }
 
+    fun setWindModeIndex(index: Int): CommandResult {
+        val modes = windDirectionCycle()
+        return setWindMode(modes[index.coerceIn(0, modes.lastIndex)])
+    }
+
+    fun applyPetMode(
+        fanLevel: Int,
+        temperatureC: Int,
+        recirculating: Boolean,
+        windModeIndex: Int,
+    ): List<CommandResult> = buildList {
+        add(start())
+        add(setCompressorEnabled(true))
+        add(setTempSynced(true))
+        add(setDriverTemp(temperatureC))
+        add(setPassengerTemp(temperatureC))
+        add(setAuto(false))
+        add(setFanLevel(fanLevel))
+        add(setWindModeIndex(windModeIndex))
+        // The wind-mode ECU update completes asynchronously and can reassert
+        // recirculation after the setter returns. Wait before applying air source.
+        pauseForEcu(PET_WIND_SETTLE_MS)
+        add(setRecirculating(recirculating))
+    }
+
+    fun restoreSnapshot(snapshot: AcSnapshot): List<CommandResult> = buildList {
+        add(start())
+        add(setTempSynced(false))
+        snapshot.driverTempC?.let { add(setDriverTemp(it)) }
+        snapshot.passengerTempC?.let { add(setPassengerTemp(it)) }
+        snapshot.fanLevel?.let { add(setFanLevel(it)) }
+        snapshot.cycleMode?.let { add(setCycleMode(it, getInt("getAcCycleMode"))) }
+        snapshot.windMode?.let { add(setWindMode(it)) }
+        snapshot.compressorMode?.let { add(setCompressorMode(it)) }
+        snapshot.maxCool?.let { add(setMaxCool(it)) }
+        snapshot.tempSynced?.let { add(setTempSynced(it)) }
+        snapshot.controlMode?.let { mode ->
+            val auto = constInt(
+                "AC_CTRLMODE_AUTO",
+                "AC_CONTROLMODE_AUTO",
+                "AC_CTRL_MODE_AUTO",
+            ) ?: CONTROL_AUTO
+            add(setAuto(mode == auto))
+        }
+        if (snapshot.powerOn == false) {
+            // Temperature, mode, and fan writes can complete asynchronously and
+            // wake the HVAC after an early stop. Let them settle, then make OFF
+            // the final applied state and verify it once more.
+            pauseForEcu(RESTORE_POWER_SETTLE_MS)
+            add(stop())
+            pauseForEcu(RESTORE_POWER_VERIFY_MS)
+            if (intToBool(getInt("getAcStartState")) != false) {
+                add(stop())
+            }
+        }
+    }
+
     private fun windDirectionCycle(): List<Int> {
-        val named = listOfNotNull(
-            constInt("AC_WINDMODE_FACE", "AC_WIND_FACE", "WIND_FACE"),
+        return listOf(
+            constInt("AC_WINDMODE_FACE", "AC_WIND_FACE", "WIND_FACE") ?: 1,
             constInt(
                 "AC_WINDMODE_FACE_FOOT",
                 "AC_WINDMODE_FACEANDFOOT",
                 "AC_WINDMODE_FACEFOOT",
                 "AC_WIND_FACE_FOOT",
                 "WIND_FACE_FOOT"
-            ),
-            constInt("AC_WINDMODE_FOOT", "AC_WIND_FOOT", "WIND_FOOT"),
+            ) ?: 2,
+            constInt("AC_WINDMODE_FOOT", "AC_WIND_FOOT", "WIND_FOOT") ?: 3,
             constInt(
                 "AC_WINDMODE_FOOT_DEFROST",
                 "AC_WINDMODE_FOOTANDDEFROST",
                 "AC_WIND_FOOT_DEFROST"
-            ),
+            ) ?: 4,
+            constInt(
+                "AC_WINDMODE_FACE_DEFROST",
+                "AC_WINDMODE_FACEANDDEFROST",
+                "AC_WINDMODE_FACEDEFROST",
+                "AC_WIND_FACE_DEFROST",
+                "WIND_FACE_DEFROST",
+            ) ?: 5,
         ).distinct().filter { it != WIND_DEFROST }
-        return named.ifEmpty { listOf(1, 2, 3, 4) }
     }
 
     fun dumpMethods(): String {
@@ -709,8 +870,8 @@ class BydAcController(context: Context) {
         return last
     }
 
-    private fun pauseForEcu() {
-        runCatching { Thread.sleep(80) }
+    private fun pauseForEcu(delayMs: Long = 80L) {
+        runCatching { Thread.sleep(delayMs) }
     }
 
     private fun dumpConstFields(start: Class<*>): String {
@@ -781,9 +942,21 @@ class BydAcController(context: Context) {
 
     private fun cycleValue(recirc: Boolean): Int {
         val name = if (recirc) {
-            arrayOf("AC_CYCLEMODE_INLOOP", "AC_CYCLE_IN", "CYCLE_IN", "AC_INLOOP")
+            arrayOf(
+                "AC_CYCLEMODE_INLOOP",
+                "AC_CYCLEMODE_INNER",
+                "AC_CYCLE_IN",
+                "CYCLE_IN",
+                "AC_INLOOP",
+            )
         } else {
-            arrayOf("AC_CYCLEMODE_OUTLOOP", "AC_CYCLE_OUT", "CYCLE_OUT", "AC_OUTLOOP")
+            arrayOf(
+                "AC_CYCLEMODE_OUTLOOP",
+                "AC_CYCLEMODE_OUTER",
+                "AC_CYCLE_OUT",
+                "CYCLE_OUT",
+                "AC_OUTLOOP",
+            )
         }
         return constInt(*name) ?: if (recirc) CYCLE_RECIRC else CYCLE_FRESH
     }
@@ -855,9 +1028,17 @@ class BydAcController(context: Context) {
         /** Fallback when SDK constants are missing: 0 = linked, 1 = dual-zone. */
         private const val TEMP_CTRL_SYNCED = 0
         private const val TEMP_CTRL_SEPARATE = 1
-        // Getter on DiLink 5: 1 = recirc, 0 = fresh. Named 2-arg SET is (source, mode).
+        // Getter on DiLink 5: 1 = recirculation, 0 = fresh air.
+        // Named 2-arg SET is (source, mode).
         private const val CYCLE_RECIRC = 1
         private const val CYCLE_FRESH = 0
+        private const val COMPRESSOR_OFF = 0
+        private const val COMPRESSOR_ON = 1
+        private const val PET_WIND_SETTLE_MS = 750L
+        private const val PET_CYCLE_RETRIES = 4
+        private const val PET_CYCLE_RETRY_MS = 750L
+        private const val RESTORE_POWER_SETTLE_MS = 1_000L
+        private const val RESTORE_POWER_VERIFY_MS = 750L
         private const val WIND_DEFROST = 0
         private val REAR_HEAT_METHODS = arrayOf(
             "setAcRearDefrostState",

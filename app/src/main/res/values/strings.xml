@@ -15,16 +15,26 @@
   <string name="settings_updates_downloading">Downloading… %1$d%%</string>
   <string name="settings_updates_downloading_bytes">Downloading… %1$d KB</string>
   <string name="settings_updates_installing">Opening installer…</string>
-  <string name="settings_updates_need_permission">Allow Open DiKey to install updates, then tap Check again.</string>
-  <string name="settings_updates_install_anyway">No install-permission settings on this head unit — downloading anyway…</string>
-  <string name="settings_updates_signature_hint">If install fails, uninstall the old debug build once, then install this release.</string>
+  <string name="settings_updates_need_permission"
+    >Allow Open DiKey to install updates, then tap Check again.</string
+  >
+  <string name="settings_updates_install_anyway"
+    >No install-permission settings on this head unit — downloading anyway…</string
+  >
+  <string name="settings_updates_signature_hint"
+    >If install fails, uninstall the old debug build once, then install this release.</string
+  >
   <string name="settings_update_dialog_title">Update available</string>
-  <string name="settings_update_dialog_body">Installed: %1$s\nLatest: %2$s\n\nDownload and install the APK from GitHub?</string>
+  <string name="settings_update_dialog_body"
+    >Installed: %1$s\nLatest: %2$s\n\nDownload and install the APK from GitHub?</string
+  >
   <string name="settings_update_later">Later</string>
   <string name="settings_update_install">Download &amp; install</string>
   <string name="color_config_title">Colors</string>
   <string name="color_home_subtitle">Ambient bars, modes, and day/night profiles</string>
-  <string name="color_config_subtitle">Each zone has its own wheel. Changes apply live when DiKey is connected.</string>
+  <string name="color_config_subtitle"
+    >Each zone has its own wheel. Changes apply live when DiKey is connected.</string
+  >
   <string name="navigate_back">Back</string>
   <string name="color_left">Left bar</string>
   <string name="color_middle">Middle bar</string>
@@ -53,12 +63,20 @@
   <string name="menu_vehicle_dump">Vehicle dump</string>
   <string name="menu_vehicle_dump_desc">Raw live snapshot and method dump</string>
   <string name="usb_title">USB serial probe</string>
-  <string name="usb_status_idle">No USB serial session. If Connect hangs, unplug and replug the USB bridge on this page.</string>
-  <string name="usb_perm_hint">DiLink often never shows the USB Allow popup. Stay on this page, unplug the USB bridge, then plug it back in — Android can grant access on attach without that dialog.</string>
-  <string name="usb_perm_waiting">Waiting for USB permission. If no popup appears, unplug and replug the USB bridge now.</string>
+  <string name="usb_status_idle"
+    >No USB serial session. If Connect hangs, unplug and replug the USB bridge on this page.</string
+  >
+  <string name="usb_perm_hint"
+    >DiLink often never shows the USB Allow popup. Stay on this page, unplug the USB bridge, then plug it back in — Android can grant access on attach without that dialog.</string
+  >
+  <string name="usb_perm_waiting"
+    >Waiting for USB permission. If no popup appears, unplug and replug the USB bridge now.</string
+  >
   <string name="usb_perm_denied">USB permission denied.</string>
   <string name="usb_devices_section">USB devices</string>
-  <string name="usb_none">No USB devices. Plug the C3 native USB into a car host port, then Refresh.</string>
+  <string name="usb_none"
+    >No USB devices. Plug the C3 native USB into a car host port, then Refresh.</string
+  >
   <string name="usb_listed">%1$d USB device(s). Starred rows are likely the USB bridge.</string>
   <string name="usb_none_selected">Select a device, then Connect.</string>
   <string name="usb_selected">Selected: %1$s · %2$s</string>
@@ -74,9 +92,13 @@
   <string name="usb_not_connected">Connect a USB device first.</string>
   <string name="climate_title">Climate test</string>
   <string name="dikey_title">DiKey probe</string>
-  <string name="dikey_status_idle">Not connected — USB C3 bridge preferred, BLE scan is fallback.</string>
+  <string name="dikey_status_idle"
+    >Not connected — USB C3 bridge preferred, BLE scan is fallback.</string
+  >
   <string name="dikey_auto_scanning">Looking for DiKey…</string>
-  <string name="dikey_usb_waiting">USB bridge open — waiting for the C3 to connect to DiKey…</string>
+  <string name="dikey_usb_waiting"
+    >USB bridge open — waiting for the C3 to connect to DiKey…</string
+  >
   <string name="dikey_auto_connecting">Found %1$s — connecting…</string>
   <string name="dikey_input_section">Button / dial events</string>
   <string name="dikey_event_log_empty">Events will appear here after connect.</string>
@@ -113,23 +135,31 @@
   <string name="command_ok">%1$s succeeded</string>
   <string name="command_fail">%1$s failed: %2$s</string>
   <string name="hidden_api_title">Allow vehicle data access?</string>
-  <string name="hidden_api_body">This app needs to relax a head-unit hidden-API restriction (scoped to BYD com.ts.* and dalvik.system) so it can bind the local climate SDK. Tap Allow — the setting is applied and the app restarts. This resets on car reboot and is re-applied when the listener starts.</string>
+  <string name="hidden_api_body"
+    >This app needs to relax a head-unit hidden-API restriction (scoped to BYD com.ts.* and dalvik.system) so it can bind the local climate SDK. Tap Allow — the setting is applied and the app restarts. This resets on car reboot and is re-applied when the listener starts.</string
+  >
   <string name="hidden_api_allow">Allow</string>
   <string name="hidden_api_not_now">Not now</string>
 
   <string name="button_mapping_title">Buttons</string>
-  <string name="button_mapping_home_subtitle">Climate defaults, dials, and remappable presses</string>
+  <string name="button_mapping_home_subtitle"
+    >Climate defaults, dials, and remappable presses</string
+  >
   <string name="vehicle_info_title">Vehicle info</string>
   <string name="vehicle_info_home_subtitle">Battery, tyres, dynamics, and more</string>
   <string name="adas_title">ADAS</string>
-  <string name="adas_home_subtitle">ELKA · LDA · AEB · cabin camera</string>
+  <string name="adas_home_subtitle">Custom ADAS profile, driver monitoring etc</string>
   <string name="sentry_title">Sentry</string>
   <string name="sentry_home_subtitle">360° sentry recording</string>
   <string name="sentry_subtitle">360° sentry recording</string>
   <string name="sentry_install_title">Install Sentry</string>
-  <string name="sentry_install_body">Sentry is not installed. Download the latest release to enable 360° recording.</string>
+  <string name="sentry_install_body"
+    >Sentry is not installed. Download the latest release to enable 360° recording.</string
+  >
   <string name="sentry_installed_title">Sentry</string>
-  <string name="sentry_installed_body">Sentry is installed. Open it to start recording, or reinstall the latest release to update.</string>
+  <string name="sentry_installed_body"
+    >Sentry is installed. Open it to start recording, or reinstall the latest release to update.</string
+  >
   <string name="sentry_install_idle">Ready to download.</string>
   <string name="sentry_installed_status">Installed and ready.</string>
   <string name="sentry_install_found">Latest release: %1$s</string>
@@ -138,7 +168,9 @@
   <string name="sentry_open_button">Open Sentry</string>
   <string name="sentry_open_failed">Could not open Sentry.</string>
   <string name="sentry_caveats_title">Before you start</string>
-  <string name="sentry_caveats">• App is in beta and may have performance issues\n• Only records while driving at the moment\n• App must be opened first to initiate recording\n• May require ADB to be enabled\n• Once installed, go to the Daemon menu and enable the recording daemon, then go to the Recording menu and configure it to record continuously</string>
+  <string name="sentry_caveats"
+    >• App is in beta and may have performance issues\n• Only records while driving at the moment\n• App must be opened first to initiate recording\n• May require ADB to be enabled\n• Once installed, go to the Daemon menu and enable the recording daemon, then go to the Recording menu and configure it to record continuously</string
+  >
   <string name="adas_section_persist">Resets after power cycle</string>
   <string name="adas_mode_default">Default</string>
   <string name="adas_mode_custom">Custom</string>
@@ -149,7 +181,9 @@
   <string name="adas_apply_partial">Some settings failed: %1$s</string>
   <string name="adas_apply_on_boot">Apply automatically on app launch</string>
   <string name="adas_auto_apply_dialog_title">Auto-apply ADAS on launch</string>
-  <string name="adas_auto_apply_disclaimer">Automatically re-writing ADAS settings (lane assist, emergency braking, driver monitoring) on every app launch changes active driver-assistance systems without a manual check each time. You are solely responsible for confirming these settings are appropriate before and while driving. Use at your own risk.</string>
+  <string name="adas_auto_apply_disclaimer"
+    >Automatically re-writing ADAS settings (lane assist, emergency braking, driver monitoring) on every app launch changes active driver-assistance systems without a manual check each time. You are solely responsible for confirming these settings are appropriate before and while driving. Use at your own risk.</string
+  >
   <string name="adas_auto_apply_save">Save</string>
   <string name="adas_auto_apply_cancel">Cancel</string>
   <string name="adas_elka_title">Emergency lane keep assist</string>
@@ -170,7 +204,9 @@
   <string name="vehicle_dump_section">Live vehicle dump</string>
   <string name="vehicle_info_section">Live vehicle dump</string>
   <string name="vehicle_info_tyres_section">Tyre sensors</string>
-  <string name="vehicle_info_status_placeholder">Vehicle status will appear here after ADB setup.</string>
+  <string name="vehicle_info_status_placeholder"
+    >Vehicle status will appear here after ADB setup.</string
+  >
   <string name="vehicle_info_refresh">Refresh</string>
   <string name="vehicle_info_dump">Dump all methods</string>
   <string name="vehicle_info_block_battery">Battery &amp; Fuel</string>
@@ -242,7 +278,9 @@
   <string name="vehicle_info_row_leak">Leak</string>
   <string name="vehicle_info_row_signal">Signal</string>
   <string name="button_mapping_defaults_title">Printed defaults</string>
-  <string name="button_mapping_defaults_body">Down click always keeps the climate function printed on the key. Dial click always switches temp/fan. Map Down long, Up, Up long, and dial long-press instead.</string>
+  <string name="button_mapping_defaults_body"
+    >Down click always keeps the climate function printed on the key. Dial click always switches temp/fan. Map Down long, Up, Up long, and dial long-press instead.</string
+  >
   <string name="button_mapping_dials_section">Dials · tap to map long-press</string>
   <string name="dial_left">Left dial</string>
   <string name="dial_right">Right dial</string>
@@ -278,12 +316,18 @@
   <string name="map_event_clear">Clear this press</string>
   <string name="map_event_clear_hint">Remove the mapping for this press only</string>
   <string name="map_event_system_action">System action</string>
-  <string name="map_event_system_action_hint">Wi‑Fi, Bluetooth, Settings, and other screens that exist on this car</string>
+  <string name="map_event_system_action_hint"
+    >Wi‑Fi, Bluetooth, Settings, and other screens that exist on this car</string
+  >
   <string name="map_event_run_intent">Custom Intent</string>
-  <string name="map_event_run_intent_hint">Advanced — type an action for Tasker or other apps</string>
+  <string name="map_event_run_intent_hint"
+    >Advanced — type an action for Tasker or other apps</string
+  >
   <string name="map_event_seat">Seat heat / cool</string>
   <string name="map_event_seat_hint">Cycle driver seat heating or ventilation</string>
-  <string name="map_event_seat_pick_hint">Each press steps off → L2 → L1 → off (same as the head unit)</string>
+  <string name="map_event_seat_pick_hint"
+    >Each press steps off → L2 → L1 → off (same as the head unit)</string
+  >
   <string name="map_event_seat_heat">Driver seat heating</string>
   <string name="map_event_seat_heat_hint">Cycle driver heat off / L1 / L2</string>
   <string name="map_event_seat_vent">Driver seat cooling</string>
@@ -296,7 +340,9 @@
   <string name="action_picker_title">System action</string>
   <string name="action_picker_hint">Only actions available on this head unit are listed</string>
   <string name="intent_editor_title">Custom Intent</string>
-  <string name="intent_editor_hint">Apps declare intent-filters for actions like VIEW or custom broadcasts. Start an activity, or send a broadcast that Tasker / other apps can listen for.</string>
+  <string name="intent_editor_hint"
+    >Apps declare intent-filters for actions like VIEW or custom broadcasts. Start an activity, or send a broadcast that Tasker / other apps can listen for.</string
+  >
   <string name="intent_field_preset">Preset</string>
   <string name="intent_field_delivery">Delivery</string>
   <string name="intent_delivery_activity">Start activity</string>
@@ -310,7 +356,9 @@
   <string name="intent_save">Save</string>
   <string name="intent_clear">Clear mapping</string>
   <string name="intent_action_required">Action is required</string>
-  <string name="intent_no_handlers">No installed app currently handles this Intent — saved anyway</string>
+  <string name="intent_no_handlers"
+    >No installed app currently handles this Intent — saved anyway</string
+  >
   <string name="intent_preset_custom">Custom</string>
   <string name="intent_preset_view_url">Open URL</string>
   <string name="intent_preset_settings">Android Settings</string>
@@ -331,4 +379,35 @@
   <string name="listen_notification_channel">DiKey listener</string>
   <string name="listen_notification_title">Open DiKey</string>
   <string name="listen_notification_body">Listening for the key</string>
+  <string name="pet_mode_title">Pet Mode</string>
+  <string name="pet_mode_home_subtitle">Keep your pet comfortable while you are away</string>
+  <string name="pet_mode_owner_message">My owner will be back soon</string>
+  <string name="pet_mode_temperature_label">The temperature is</string>
+  <string name="pet_mode_starting">Setting a comfortable temperature…</string>
+  <string name="pet_mode_active">Pet Mode is active</string>
+  <string name="pet_mode_apply_failed">Some climate settings could not be applied</string>
+  <string name="pet_mode_checking_ready">Checking whether the vehicle is ready…</string>
+  <string name="pet_mode_vehicle_not_ready"
+    >The air conditioner is not active.\n\nHold the brake and start the car to enable the AC unit.</string
+  >
+  <string name="pet_mode_restoring">Restoring the previous climate settings…</string>
+  <string name="pet_mode_configure">Configure Pet Mode</string>
+  <string name="pet_mode_config_subtitle"
+    >These settings are applied whenever Pet Mode opens.</string
+  >
+  <string name="pet_mode_fan_speed">Fan speed</string>
+  <string name="pet_mode_fan_fmt">Level %1$d</string>
+  <string name="pet_mode_temperature">Temperature</string>
+  <string name="pet_mode_temp_value_fmt">%1$d°C</string>
+  <string name="pet_mode_recirc">Recirculate cabin air</string>
+  <string name="pet_mode_wind_mode">Wind direction</string>
+  <string name="pet_mode_wind_face">Face</string>
+  <string name="pet_mode_wind_face_feet">Face + feet</string>
+  <string name="pet_mode_wind_feet">Feet</string>
+  <string name="pet_mode_wind_feet_demist">Feet + demist</string>
+  <string name="pet_mode_wind_face_demist">Face + demist</string>
+  <string name="pet_mode_save">Save settings</string>
+  <string name="pet_mode_saved">Pet Mode settings saved</string>
+  <string name="decrease">Decrease</string>
+  <string name="increase">Increase</string>
 </resources>
