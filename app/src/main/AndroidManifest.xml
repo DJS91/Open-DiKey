@@ -82,6 +82,7 @@
 
   <queries>
     <package android:name="com.strike" />
+    <package android:name="com.overdrive.app" />
     <intent>
       <action android:name="android.intent.action.MAIN" />
       <category android:name="android.intent.category.LAUNCHER" />

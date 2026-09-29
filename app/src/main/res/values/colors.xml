@@ -16,6 +16,7 @@
     <color name="accent_orange">#FFFF5A1F</color>
     <color name="accent_orange_soft">#33FF5A1F</color>
     <color name="tyre_ok">#FF3DDC84</color>
+    <color name="accent_green_soft">#333DDC84</color>
     <color name="tyre_under">#FFFF5A1F</color>
     <color name="tyre_fault">#FFFF3B30</color>
     <color name="horizon_sky">#FF2A6FBF</color>
