@@ -62,6 +62,30 @@
   <string name="menu_usb_desc">Raw serial to the C3 USB bridge</string>
   <string name="menu_vehicle_dump">Vehicle dump</string>
   <string name="menu_vehicle_dump_desc">Raw live snapshot and method dump</string>
+  <string name="menu_diagnostics">Diagnostics report</string>
+  <string name="menu_diagnostics_desc"
+    >Test ADB, permissions, BYD SDK, USB bridge and DiKey, then share the report</string
+  >
+  <string name="menu_adb_service">Open ADB menu</string>
+  <string name="menu_adb_service_desc"
+    >BYD service menu for USB and wireless ADB (same as tapping factory reset 10 times)</string
+  >
+  <string name="adb_service_unavailable">BYD ADB service menu not found on this unit</string>
+  <string name="diag_title">Diagnostics</string>
+  <string name="diag_intro"
+    >Runs read-only checks on every stage the app relies on. Keep this screen open and press a few DiKey buttons first so they are captured. The report is copied to the clipboard and saved to /sdcard/open-dikey-diagnostics.txt.</string
+  >
+  <string name="diag_run">Run diagnostics</string>
+  <string name="diag_write_test">Climate write test</string>
+  <string name="diag_write_test_body"
+    >This changes the driver temperature and fan speed by one step, reads them back, then restores them. Start the car (READY) with climate on first.</string
+  >
+  <string name="diag_write_test_run">Run test</string>
+  <string name="diag_copy">Copy</string>
+  <string name="diag_share">Share</string>
+  <string name="diag_copied">Report copied to clipboard</string>
+  <string name="diag_run_first">Run diagnostics first</string>
+  <string name="diag_share_unavailable">No app available to share with — use Copy or the saved file</string>
   <string name="usb_title">USB serial probe</string>
   <string name="usb_status_idle"
     >No USB serial session. If Connect hangs, unplug and replug the USB bridge on this page.</string

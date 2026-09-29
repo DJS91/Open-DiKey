@@ -2,6 +2,7 @@ package com.sphy.airconcontroller.adb
 
 import android.content.Context
 import android.util.Log
+import com.sphy.airconcontroller.boot.KeepAliveNotificationListener
 import dadb.AdbKeyPair
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ object AdbPermissionManager {
 
     private const val TAG = "AdbPermissionManager"
     private const val ADB_PORT = 5555
+    private const val PORT_WAIT_ATTEMPTS = 10
     private val ADB_HOST_CANDIDATES = listOf("127.0.0.1", "::1")
     private const val KEY_FILE = "adbkey"
     private const val KEY_PUB_FILE = "adbkey.pub"
@@ -88,6 +90,7 @@ object AdbPermissionManager {
         "appops set \$pkg RUN_IN_BACKGROUND allow",
         "appops set \$pkg RUN_ANY_IN_BACKGROUND allow",
         "appops set \$pkg WAKE_LOCK allow",
+        "cmd notification allow_listener \$pkg/${KeepAliveNotificationListener::class.java.name}",
     )
 
     sealed class SetupState {
@@ -174,7 +177,7 @@ object AdbPermissionManager {
         _state.value = SetupState.Connecting
 
         try {
-            if (!isPortOpen()) {
+            if (!restoreAdbAndWaitForPort(context)) {
                 _state.value = SetupState.Failed(
                     "ADB not enabled. On the car, open Settings → System → Developer Options " +
                         "and enable USB Debugging."
@@ -338,7 +341,7 @@ object AdbPermissionManager {
     }
 
     suspend fun ensureVehicleApiAccess(context: Context): Boolean = withContext(Dispatchers.IO) {
-        if (!isPortOpen()) return@withContext false
+        if (!restoreAdbAndWaitForPort(context)) return@withContext false
         val keyPair = getOrCreateKeyPair(context)
         val dadb = tryConnect(keyPair, timeoutMs = 2_000) ?: return@withContext false
         try {
@@ -414,6 +417,18 @@ object AdbPermissionManager {
             return null
         }
         return result
+    }
+
+    /** Turns adb_enabled back on if needed, then gives adbd time to open its port. */
+    private suspend fun restoreAdbAndWaitForPort(context: Context): Boolean {
+        val justEnabled = AdbKeepAlive.ensureEnabled(context)
+        if (isPortOpen()) return true
+        if (!justEnabled && !AdbKeepAlive.isEnabled(context)) return false
+        repeat(PORT_WAIT_ATTEMPTS) {
+            delay(1_000)
+            if (isPortOpen()) return true
+        }
+        return false
     }
 
     fun isPortOpen(): Boolean {
