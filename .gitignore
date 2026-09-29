@@ -20,6 +20,7 @@ local.properties
 *.keystore
 keystore.properties
 release.jks
+sec.md
 
 # Vendor reverse-engineering dumps (jadx, tools, APK copies).
 # Keep protocol research notes only.
