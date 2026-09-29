@@ -345,9 +345,9 @@ class AppSettings(context: Context) {
             .apply()
     }
 
-    /** Whether the saved Custom ADAS profile should be auto-applied when the app launches. */
+    /** Whether the saved Custom ADAS profile should be auto-applied when the app launches. Off until the user opts in. */
     var adasApplyOnBoot: Boolean
-        get() = prefs.getBoolean(KEY_ADAS_APPLY_ON_BOOT, true)
+        get() = prefs.getBoolean(KEY_ADAS_APPLY_ON_BOOT, false)
         set(value) {
             prefs.edit().putBoolean(KEY_ADAS_APPLY_ON_BOOT, value).apply()
         }
