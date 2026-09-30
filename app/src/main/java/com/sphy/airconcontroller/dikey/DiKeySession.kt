@@ -87,7 +87,9 @@ class DiKeySession(private val app: Context) {
             _events.tryEmit(event)
             climateMapper.handle(event)
             upMapper.handle(event)
-        }
+        },
+        onDialsReady = { climateMapper.startSync() },
+        onLinkDown = { climateMapper.stopSync() }
     )
 
     private val climateMapper: DiKeyClimateMapper
@@ -315,6 +317,7 @@ class DiKeySession(private val app: Context) {
             rightType = rightType.code,
             rightValue = rightValue
         )
+        climateMapper.seedModes(leftType.code, rightType.code)
         // Colors wait for LightingScheduler cabin ambient; dials/temps restore immediately.
         if (com.sphy.airconcontroller.lighting.LightingScheduler.currentPeriod() != null) {
             controller.seedLedMemory(settings.ledRestoreSnapshot())
@@ -394,6 +397,7 @@ class DiKeySession(private val app: Context) {
 
     private fun persistDialFromEvent(event: DiKeyEvent) {
         if (event !is DiKeyEvent.Encoder) return
+        if (climateMapper.isShowingOff(event.side == "LEFT")) return
         val type = DialDisplayType.fromCode(event.displayType) ?: return
         settings.saveDial(event.side == "LEFT", type, event.value)
     }

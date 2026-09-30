@@ -175,6 +175,24 @@ class BydAcController(context: Context) {
         )
     }
 
+    data class DialState(
+        val powerOn: Boolean?,
+        val driverTempC: Int?,
+        val passengerTempC: Int?,
+        val fanLevel: Int?
+    )
+
+    /** Cheap live read for mirroring car-side changes onto the DiKey dials. */
+    fun dialState(): DialState {
+        if (!isBound()) return DialState(null, null, null, null)
+        return DialState(
+            powerOn = intToBool(getInt("getAcStartState")),
+            driverTempC = plausibleTemp(getIntArg("getTemprature", ZONE_DRIVER) ?: getIntArg("getTemperature", ZONE_DRIVER)),
+            passengerTempC = plausibleTemp(getIntArg("getTemprature", ZONE_PASSENGER) ?: getIntArg("getTemperature", ZONE_PASSENGER)),
+            fanLevel = getInt("getAcWindLevel")?.takeIf { it in FAN_MIN..FAN_MAX } ?: lastSetFanLevel,
+        )
+    }
+
     fun start(): CommandResult = setPower(true)
 
     fun stop(): CommandResult = setPower(false)

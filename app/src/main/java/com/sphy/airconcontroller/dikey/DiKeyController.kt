@@ -11,7 +11,9 @@ interface DiKeyFrameSink {
  */
 class DiKeyController(
     private val onStatus: (String) -> Unit,
-    private val onEvent: (DiKeyEvent) -> Unit
+    private val onEvent: (DiKeyEvent) -> Unit,
+    private val onDialsReady: () -> Unit = {},
+    private val onLinkDown: () -> Unit = {}
 ) {
     private val writeQueue = ArrayDeque<OutboundWrite>()
     private var writeInFlight = false
@@ -63,6 +65,7 @@ class DiKeyController(
         lastDialTypeRight = null
         lastDialValueRight = null
         onStatus(reason)
+        onLinkDown()
     }
 
     fun ingestNotify(value: ByteArray) {
@@ -132,34 +135,41 @@ class DiKeyController(
         val lastType = if (left) lastDialTypeLeft else lastDialTypeRight
         val switchDisplay = lastType == null || lastType != displayType
         val sideLabel = if (left) "LEFT" else "RIGHT"
+        // Recorded at enqueue so a back-to-back write on the other dial reaffirms this
+        // type, not the one still on the LCD.
+        if (left) {
+            lastDialTypeLeft = displayType
+            lastDialValueLeft = clamped
+        } else {
+            lastDialTypeRight = displayType
+            lastDialValueRight = clamped
+        }
+        val rememberForRestore: (() -> Unit)? = if (displayType == DiKeyProtocol.DISPLAY_TYPE_BLANK) {
+            null
+        } else {
+            {
+                val p = pendingRestore
+                pendingRestore = if (left) {
+                    PendingDialRestore(
+                        leftType = displayType,
+                        leftValue = clamped,
+                        rightType = p?.rightType ?: displayType,
+                        rightValue = p?.rightValue ?: clamped
+                    )
+                } else {
+                    PendingDialRestore(
+                        leftType = p?.leftType ?: displayType,
+                        leftValue = p?.leftValue ?: clamped,
+                        rightType = displayType,
+                        rightValue = clamped
+                    )
+                }
+            }
+        }
         writeQueue.addLast(
             OutboundWrite(
                 bytes = DiKeyProtocol.buildDialDisplay(left, displayType, clamped, switchDisplay),
-                onSuccess = {
-                    if (left) {
-                        lastDialTypeLeft = displayType
-                        lastDialValueLeft = clamped
-                    } else {
-                        lastDialTypeRight = displayType
-                        lastDialValueRight = clamped
-                    }
-                    val p = pendingRestore
-                    pendingRestore = if (left) {
-                        PendingDialRestore(
-                            leftType = displayType,
-                            leftValue = clamped,
-                            rightType = p?.rightType ?: displayType,
-                            rightValue = p?.rightValue ?: clamped
-                        )
-                    } else {
-                        PendingDialRestore(
-                            leftType = p?.leftType ?: displayType,
-                            leftValue = p?.leftValue ?: clamped,
-                            rightType = displayType,
-                            rightValue = clamped
-                        )
-                    }
-                },
+                onSuccess = rememberForRestore,
                 logLabel = "dial $sideLabel type=0x%02X val=%d switch=%d".format(
                     displayType, clamped, if (switchDisplay) 1 else 0
                 )
@@ -310,6 +320,7 @@ class DiKeyController(
                         } else {
                             onStatus("Ready — listening for button / dial events")
                         }
+                        onDialsReady()
                     },
                     logLabel = "mode LEFT 0x07 types=${DialDisplayType.leftCycleTypes}"
                 )

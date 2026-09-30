@@ -20,6 +20,9 @@ object DiKeyProtocol {
     const val CMD_BUTTON_EVENT: Byte = 0x10
     const val CMD_ENCODER_EVENT: Byte = 0x11
 
+    /** Dial LCD "None" type — used to show climate off. */
+    const val DISPLAY_TYPE_BLANK = 0x01
+
     fun buildFrame(command: Byte, payload: ByteArray = ByteArray(0)): ByteArray {
         require(payload.size <= 240) { "payload too long" }
         val out = ByteArray(payload.size + 5)
