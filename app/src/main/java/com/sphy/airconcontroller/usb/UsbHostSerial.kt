@@ -61,6 +61,10 @@ class UsbHostSerial(
             .sortedWith(compareByDescending<ListedDevice> { it.likelyProbe }.thenBy { it.title })
 
     fun open(device: UsbDevice): String? {
+        if (isMassStorage(device)) {
+            Log.w(TAG, "refusing to open mass-storage device ${label(device)}")
+            return "Refusing USB storage device ${label(device)}"
+        }
         close()
         val hadPerm = usbManager.hasPermission(device)
         val conn = usbManager.openDevice(device)
@@ -220,6 +224,17 @@ class UsbHostSerial(
             val name = (device.productName ?: "").uppercase()
             if (name.contains("ODK") || name.contains("ESP32") || name.contains("JTAG")) return true
             return device.vendorId == VID_ESPRESSIF || device.vendorId == VID_SILABS
+        }
+
+        /** Force-claiming a storage interface detaches usb-storage and kills the mounted volume. */
+        fun isMassStorage(device: UsbDevice): Boolean {
+            if (device.deviceClass == UsbConstants.USB_CLASS_MASS_STORAGE) return true
+            for (i in 0 until device.interfaceCount) {
+                if (device.getInterface(i).interfaceClass == UsbConstants.USB_CLASS_MASS_STORAGE) {
+                    return true
+                }
+            }
+            return false
         }
 
         fun label(device: UsbDevice): String {

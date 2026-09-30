@@ -45,7 +45,7 @@ class UsbProbeActivity : OpenDiKeyActivity() {
                     appendLog("USB attached")
                     val device = deviceExtra(intent)
                     refreshList(selectLikely = true)
-                    if (device != null) {
+                    if (device != null && UsbHostSerial.isLikelyProbe(device)) {
                         selected = device
                         connectDevice(device)
                     }
@@ -141,7 +141,7 @@ class UsbProbeActivity : OpenDiKeyActivity() {
         if (intent == null) return
         when (intent.action) {
             UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                val device = deviceExtra(intent) ?: return
+                val device = deviceExtra(intent)?.takeIf { UsbHostSerial.isLikelyProbe(it) } ?: return
                 selected = device
                 selectedText.text = getString(
                     R.string.usb_selected,

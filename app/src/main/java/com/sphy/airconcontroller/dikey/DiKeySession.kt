@@ -191,7 +191,7 @@ class DiKeySession(private val app: Context) {
     }
 
     fun tryConnectUsb(preferred: UsbDevice?): Boolean {
-        val device = preferred
+        val device = preferred?.takeIf { UsbHostSerial.isLikelyProbe(it) }
             ?: usbManager.deviceList.values.firstOrNull { UsbHostSerial.isLikelyProbe(it) }
             ?: return false
         if (usbBridge.isUsbOpen) {
