@@ -202,7 +202,7 @@
   <string name="overdrive_open_failed">Could not open Overdrive.</string>
   <string name="overdrive_caveats_title">Setup after installing</string>
   <string name="overdrive_caveats"
-    >1. Go to Diagnostics → Daemon Storage and toggle on Alternate Daemon Storage\n2. Go to Diagnostics → Camera Probe and set Ingestion Mode to DiLink5\n3. In Camera Probe, set Camera Order to Shark</string
+    >1. Go to Diagnostics → Daemon Storage and toggle on Alternate Daemon Storage\n2. Go to Diagnostics → Camera Probe and set Ingestion Mode to DiLink5 and Camera Order to Shark\n3. Go to Settings → Surveillance and enable any DiLink5 keep alive mode(s)\n4. Go to Settings → Daemons and make sure Camera, Surveillance and ACC are on and running</string
   >
   <string name="strike_title">Strike</string>
   <string name="strike_badge">Experimental</string>

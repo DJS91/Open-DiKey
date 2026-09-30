@@ -90,17 +90,25 @@
         android:max="100"
         android:visibility="gone" />
 
-    <Button
-        android:id="@+id/companionOpenButton"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:visibility="gone" />
+        android:orientation="horizontal">
 
-    <Button
-        android:id="@+id/companionInstallButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/sentry_install_button" />
+        <Button
+            android:id="@+id/companionOpenButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/companionInstallButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/sentry_install_button" />
+    </LinearLayout>
 </LinearLayout>
