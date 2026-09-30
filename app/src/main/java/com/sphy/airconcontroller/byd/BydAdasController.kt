@@ -12,7 +12,8 @@ import java.lang.reflect.InvocationTargetException
  * - LDA get is 0/1/2/3 (Off/Warning/Prevent/Both).
  *   Set via DiPilot LaneAssistType: 1/2/4 work; Prevent uses DEPARTURE_STOP(5) not KEEP(3).
  *   Feature LKS (3255/3256) uses the same 0/1/2/3 encoding as get.
- * - ELKA get is 0/1 style; set ON=1 OFF=0 (SET_ON=2 does not stick).
+ * - ELKA set matches car Settings: ON=2 OFF=1 (writing 1 requests OFF, 0 is ignored).
+ *   Get is 0=off, 1/2=on, 3=unavailable; Settings reads 2F0 when body msg 143 is online, else 32F.
  * - AEB via AiEmergencyBrake works.
  * - Cabin camera / DMC: try DMS device (setDmsSwtichStatus), CPD/IMS, then DiPilot aids.
  */
@@ -22,6 +23,7 @@ class BydAdasController(context: Context) {
 
     @Volatile private var diPilot: Any? = null
     @Volatile private var dmsDevice: Any? = null
+    @Volatile private var bodywork: Any? = null
 
     /** Last DMS switch value from async callback / fresh query (null until known). */
     @Volatile private var lastDmsSwitch: Int? = null
@@ -118,8 +120,7 @@ class BydAdasController(context: Context) {
         }
         bypassDiPilotPermissions(diPilot)
 
-        val elkaRaw = readInt("getEmergencyLaneAssistance32FState")
-            ?: readInt("getEmergencyLaneAssistance2F0State")
+        val elkaRaw = elkaGetMethods().firstNotNullOfOrNull { readInt(it) }
             ?: pollFeature(FEATURE_ELKA_STATE)
         val laneRaw = readInt("getLaneAssistType")
             ?: pollFeature(FEATURE_LKS_MODE)
@@ -156,25 +157,124 @@ class BydAdasController(context: Context) {
         )
     }
 
+    /**
+     * Auto-apply path for a freshly started process (app launch, cold boot, restart after standby).
+     * Waits for the async OEM adapters (DiPilot CarAssist, DMS SettingsAdapter) because their
+     * setters silently drop writes while still connecting, then re-reads each setting and
+     * re-applies any that did not stick. Result order matches [applyCustomProfile].
+     */
+    fun applyCustomProfileVerified(profile: AdasCustomProfile): List<CommandResult> {
+        val ready = awaitReady(READY_WAIT_MS)
+        val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
+            ?: LaneDepartureMode.BOTH
+        val steps: List<Pair<() -> CommandResult, () -> Boolean?>> = listOf(
+            { setEmergencyLaneKeepAssist(profile.elka) } to { readElkaEnabled()?.let { it == profile.elka } },
+            { setLaneDepartureAssist(lda) } to { readLaneDeparture()?.let { it == lda } },
+            { setAutomaticEmergencyBraking(profile.aeb) } to { readAebEnabled()?.let { it == profile.aeb } },
+            { setDriverMonitoringCamera(profile.dms) } to { readDmsEnabled()?.let { it == profile.dms } },
+        )
+        val results = steps.map { it.first() }.toMutableList()
+
+        for (round in 1..VERIFY_ROUNDS) {
+            sleepQuietly(VERIFY_SETTLE_MS)
+            val states = steps.map { it.second() }
+            val pending = steps.indices.filter { states[it] != true }
+            Log.i(TAG, "auto-apply verify round $round (ready=$ready): states=$states pending=$pending")
+            if (pending.isEmpty()) return results
+            if (round == VERIFY_ROUNDS) {
+                return results.mapIndexed { i, r ->
+                    if (states[i] == false) r.copy(success = false, detail = "did not stick after retries (${r.detail})") else r
+                }
+            }
+            pending.forEach { results[it] = steps[it].first() }
+        }
+        return results
+    }
+
+    /** Wait until the DiPilot CarAssist binder and the DMS SettingsAdapter have both connected. */
+    fun awaitReady(timeoutMs: Long): Boolean {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000L
+        while (true) {
+            ensureDiPilot()
+            ensureDmsDevice()
+            val assist = carAssist() != null
+            val dms = dmsSettingsManager() != null
+            if (assist && dms) return true
+            if (System.nanoTime() >= deadline) {
+                Log.w(TAG, "awaitReady timed out: carAssist=$assist dmsSettings=$dms")
+                return false
+            }
+            sleepQuietly(READY_POLL_MS)
+        }
+    }
+
+    private fun readElkaEnabled(): Boolean? =
+        elkaGetMethods().firstNotNullOfOrNull { readInt(it) }
+            ?.takeIf { it in 0..2 }
+            ?.let(::decodeElka)
+
+    private fun readLaneDeparture(): LaneDepartureMode? =
+        LaneDepartureMode.fromRaw(readInt("getLaneAssistType") ?: pollFeature(FEATURE_LKS_MODE))
+
+    private fun readAebEnabled(): Boolean? =
+        (readInt("getAiEmergencyBrakeState") ?: pollFeature(FEATURE_AEB_STATE))
+            ?.takeIf { it >= 0 }
+            ?.let(::decodeFuncOrSetOn)
+
+    private fun readDmsEnabled(): Boolean? = queryDmsSwitchConfirmed()?.let(::decodeDms)
+
+    private fun sleepQuietly(ms: Long) {
+        try {
+            Thread.sleep(ms)
+        } catch (_: InterruptedException) {
+        }
+    }
+
     fun setEmergencyLaneKeepAssist(enabled: Boolean): CommandResult {
         if (!ensureDiPilot()) {
             return CommandResult(false, "ELKA", lastBindError ?: "unbound")
         }
-        // Shark: OFF sticks with 0; ON sticks with 1 (not DiPilot SET_ON=2).
         return setSwitch(
             label = "ELKA",
             enabled = enabled,
             setMethods = listOf("setEmergencyLaneAssistanceState"),
-            getMethods = listOf(
-                "getEmergencyLaneAssistance32FState",
-                "getEmergencyLaneAssistance2F0State",
-            ),
+            getMethods = elkaGetMethods(),
             featureSetId = FEATURE_ELKA_SET,
             featureGetId = FEATURE_ELKA_STATE,
             decode = ::decodeElka,
-            onValues = listOf(FUNC_ON, SET_ON),
-            offValues = listOf(FUNC_OFF, SET_OFF),
+            onValues = listOf(SET_ON),
+            offValues = listOf(SET_OFF),
         )
+    }
+
+    private fun elkaGetMethods(): List<String> {
+        val on2F0 = bodyworkHasMessage(BODY_MSG_ELKA_2F0) == true
+        return if (on2F0) {
+            listOf("getEmergencyLaneAssistance2F0State", "getEmergencyLaneAssistance32FState")
+        } else {
+            listOf("getEmergencyLaneAssistance32FState", "getEmergencyLaneAssistance2F0State")
+        }
+    }
+
+    private fun bodyworkHasMessage(msgId: Int): Boolean? {
+        return try {
+            val device = bodywork ?: Class.forName(BODYWORK_CLASS)
+                .getMethod("getInstance", Context::class.java)
+                .let { m ->
+                    runCatching { m.invoke(null, permContext) }.getOrNull()
+                        ?: runCatching { m.invoke(null, appContext) }.getOrNull()
+                }
+                ?.also { bodywork = it }
+                ?: return null
+            val ret = device.javaClass
+                .getMethod("hasMessage", Int::class.javaPrimitiveType)
+                .invoke(device, msgId)
+            (ret as? Number)?.toInt() == 1
+        } catch (t: Throwable) {
+            val c = (t as? InvocationTargetException)?.cause ?: t
+            Log.w(TAG, "hasMessage($msgId): ${c.javaClass.simpleName}: ${c.message}")
+            null
+        }
     }
 
     fun setLaneDepartureAssist(mode: LaneDepartureMode): CommandResult {
@@ -309,7 +409,8 @@ class BydAdasController(context: Context) {
         val attempts = mutableListOf<String>()
 
         for (value in candidates) {
-            val valueMatched: (Int) -> Boolean = { it == value || decode(it) == enabled }
+            // Read and write encodings differ (write 1 = OFF, read 1 = ON), so never match on raw value.
+            val valueMatched: (Int) -> Boolean = { decode(it) == enabled }
             for (setMethod in setMethods) {
                 if (!hasMethod(diPilot, setMethod) && carAssist()?.let { hasMethod(it, setMethod) } != true) {
                     continue
@@ -350,7 +451,7 @@ class BydAdasController(context: Context) {
         return CommandResult(false, label, attempts.joinToString(" | ").ifEmpty { "no API" })
     }
 
-    /** ELKA on Shark: get uses 0=off, 1 (or 2)=on. */
+    /** ELKA get: 0=off, 1 or 2=on, 3=unavailable. */
     private fun decodeElka(raw: Int): Boolean = raw == FUNC_ON || raw == SET_ON
 
     /** FUNCATION_* or mixed: on=1 or 2, off=0. */
@@ -471,27 +572,7 @@ class BydAdasController(context: Context) {
         try {
             val listenerCls = Class.forName("com.ts.lib.settings.dms.OnDmsChangedListener")
             if (listenerCls.isInterface) {
-                val holder = arrayOfNulls<Any>(1)
-                val proxy = java.lang.reflect.Proxy.newProxyInstance(
-                    listenerCls.classLoader,
-                    arrayOf(listenerCls),
-                ) { _, method, args ->
-                    when (method.name) {
-                        "onDmsSwitchChanged" -> {
-                            val v = (args?.getOrNull(0) as? Number)?.toInt()
-                            if (v != null) {
-                                lastDmsSwitch = v
-                                dmsSwitchSeq++
-                                Log.i(TAG, "onDmsSwitchChanged=$v")
-                            }
-                        }
-                        "equals" -> args?.getOrNull(0) === holder[0]
-                        "hashCode" -> System.identityHashCode(holder[0] ?: this)
-                        "toString" -> "OnDmsChangedListenerProxy"
-                    }
-                    null
-                }
-                holder[0] = proxy
+                val proxy = dmsSwitchListenerProxy(listenerCls, "OnDmsChangedListener")
                 val smCls = Class.forName("android.hardware.bydauto.SettingsManagerImpl")
                 val sm = smCls.getMethod("getInstance", Context::class.java).invoke(null, permContext)
                 smCls.getMethod("setDmsChangedListenerListener", listenerCls).invoke(sm, proxy)
@@ -508,31 +589,42 @@ class BydAdasController(context: Context) {
                 Log.i(TAG, "IDMSListener is not an interface; skipping Proxy")
                 return
             }
-            val holder = arrayOfNulls<Any>(1)
-            val proxy = java.lang.reflect.Proxy.newProxyInstance(
-                listenerCls.classLoader,
-                arrayOf(listenerCls),
-            ) { _, method, args ->
-                when (method.name) {
-                    "onDmsSwitchChanged" -> {
-                        val v = (args?.getOrNull(0) as? Number)?.toInt()
-                        if (v != null) {
-                            lastDmsSwitch = v
-                            dmsSwitchSeq++
-                            Log.i(TAG, "IDMSListener.onDmsSwitchChanged=$v")
-                        }
-                    }
-                    "equals" -> args?.getOrNull(0) === holder[0]
-                    "hashCode" -> System.identityHashCode(holder[0] ?: this)
-                    "toString" -> "IDMSListenerProxy"
-                }
-                null
-            }
-            holder[0] = proxy
+            val proxy = dmsSwitchListenerProxy(listenerCls, "IDMSListener")
             device.javaClass.getMethod("registerListener", listenerCls).invoke(device, proxy)
         } catch (t: Throwable) {
             Log.w(TAG, "register IDMSListener: ${t.javaClass.simpleName}: ${t.message}")
         }
+    }
+
+    /**
+     * Callback proxy that records onDmsSwitchChanged (1=on, 0=off, -1=unknown).
+     * equals/hashCode must return real values: registration calls List.contains() on it,
+     * and a null return for a primitive throws, silently dropping the listener.
+     */
+    private fun dmsSwitchListenerProxy(listenerCls: Class<*>, label: String): Any {
+        val holder = arrayOfNulls<Any>(1)
+        val proxy = java.lang.reflect.Proxy.newProxyInstance(
+            listenerCls.classLoader,
+            arrayOf(listenerCls),
+        ) { _, method, args ->
+            when (method.name) {
+                "equals" -> args?.getOrNull(0) === holder[0]
+                "hashCode" -> System.identityHashCode(holder[0])
+                "toString" -> "${label}Proxy"
+                "onDmsSwitchChanged" -> {
+                    val v = (args?.getOrNull(0) as? Number)?.toInt()
+                    if (v != null) {
+                        lastDmsSwitch = v
+                        dmsSwitchSeq++
+                        Log.i(TAG, "$label.onDmsSwitchChanged=$v")
+                    }
+                    null
+                }
+                else -> null
+            }
+        }
+        holder[0] = proxy
+        return proxy
     }
 
     private fun setViaDmsDevice(enabled: Boolean): CommandResult {
@@ -541,70 +633,77 @@ class BydAdasController(context: Context) {
         val value = if (enabled) DMS_ON else DMS_OFF
         val attempts = mutableListOf<String>()
 
-        // Write through DmsSettingsManager first (same binder Settings uses).
-        val mgr = dmsSettingsManager()
-        if (mgr != null) {
-            for (method in listOf("setDmsSwtichStatus", "setDmsSwitchStatus")) {
-                if (!hasMethod(mgr, method)) continue
-                try {
-                    mgr.javaClass.getMethod(method, Int::class.javaPrimitiveType).invoke(mgr, value)
-                    lastDmsSwitch = value
-                    dmsSwitchSeq++
-                    requestDmsSwitchRefresh()
-                    val verified = verifyDmsSwitch(value, enabled)
-                    // Void setters: no result code — accept after short verify or optimistically.
-                    return CommandResult(
-                        true,
-                        "DmsSettings.$method",
-                        if (verified.success) verified.detail else "value=$value accepted (${verified.detail})",
-                    )
-                } catch (t: Throwable) {
-                    val c = (t as? InvocationTargetException)?.cause ?: t
-                    attempts += "DmsSettings.$method: ${c.javaClass.simpleName}: ${c.message}"
-                }
-            }
-        }
+        // BYDAutoDmsDevice.setDmsSwtichStatus only logs "SettingsAdapter still connecting" and drops
+        // the write until SettingsManagerImpl's async bind completes, so wait for the manager instead.
+        val mgr = dmsSettingsManager() ?: awaitDmsSettingsManager(DMS_CONNECT_WAIT_MS)
+            ?: return CommandResult(false, "DmsSettings", "SettingsAdapter still connecting")
 
         for (method in listOf("setDmsSwtichStatus", "setDmsSwitchStatus")) {
-            if (!hasMethod(device, method)) continue
+            if (!hasMethod(mgr, method)) continue
             try {
-                device.javaClass.getMethod(method, Int::class.javaPrimitiveType).invoke(device, value)
-                lastDmsSwitch = value
-                dmsSwitchSeq++
-                requestDmsSwitchRefresh()
+                mgr.javaClass.getMethod(method, Int::class.javaPrimitiveType).invoke(mgr, value)
                 val verified = verifyDmsSwitch(value, enabled)
+                // Void setter: no result code, so accept even if the confirm callback is late.
                 return CommandResult(
                     true,
-                    "Dms.$method",
+                    "DmsSettings.$method",
                     if (verified.success) verified.detail else "value=$value accepted (${verified.detail})",
                 )
             } catch (t: Throwable) {
                 val c = (t as? InvocationTargetException)?.cause ?: t
-                attempts += "$method: ${c.javaClass.simpleName}: ${c.message}"
+                attempts += "DmsSettings.$method: ${c.javaClass.simpleName}: ${c.message}"
             }
         }
 
         return CommandResult(false, "DmsDevice", attempts.joinToString(" | ").ifEmpty { "no API" })
     }
 
-    private fun verifyDmsSwitch(wrote: Int, enabled: Boolean): CommandResult {
-        var after: Int? = null
-        for (attempt in 0 until 3) {
-            if (attempt > 0) {
-                try {
-                    Thread.sleep(60L)
-                } catch (_: InterruptedException) {
-                }
-            }
-            refreshDmsSwitchFromHal(waitMs = if (attempt == 0) 0L else 80L)
-            after = readDmsSettingsInt("getDmsSwitchStatus")
-                ?: lastDmsSwitch
-                ?: pollFeature(FEATURE_DMS_SWITCH)
-            if (after != null && (after == wrote || decodeDms(after) == enabled)) {
-                return CommandResult(true, null, "wrote=$wrote after=$after")
+    private fun awaitDmsSettingsManager(timeoutMs: Long): Any? {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000L
+        while (System.nanoTime() < deadline) {
+            dmsSettingsManager()?.let { return it }
+            try {
+                Thread.sleep(READY_POLL_MS)
+            } catch (_: InterruptedException) {
+                return null
             }
         }
-        return CommandResult(false, null, "HAL lag: wrote=$wrote after=$after lastDms=$lastDmsSwitch")
+        return dmsSettingsManager()
+    }
+
+    /** Confirmed only by a fresh onDmsSwitchChanged callback, never by our own write. */
+    private fun verifyDmsSwitch(wrote: Int, enabled: Boolean): CommandResult {
+        val beforeSeq = dmsSwitchSeq
+        requestDmsSwitchRefresh()
+        val deadline = System.nanoTime() + DMS_CONFIRM_WAIT_MS * 1_000_000L
+        while (System.nanoTime() < deadline) {
+            val after = lastDmsSwitch
+            if (dmsSwitchSeq != beforeSeq && after != null && after >= 0 && decodeDms(after) == enabled) {
+                return CommandResult(true, null, "wrote=$wrote after=$after")
+            }
+            try {
+                Thread.sleep(50L)
+            } catch (_: InterruptedException) {
+                break
+            }
+        }
+        return CommandResult(false, null, "no confirm: wrote=$wrote lastDms=$lastDmsSwitch")
+    }
+
+    /** Current DMS switch from a fresh callback: 1=on, 0=off, null if the DMS service didn't answer. */
+    private fun queryDmsSwitchConfirmed(): Int? {
+        val beforeSeq = dmsSwitchSeq
+        requestDmsSwitchRefresh()
+        val deadline = System.nanoTime() + DMS_CONFIRM_WAIT_MS * 1_000_000L
+        while (System.nanoTime() < deadline) {
+            if (dmsSwitchSeq != beforeSeq) return lastDmsSwitch?.takeIf { it >= 0 }
+            try {
+                Thread.sleep(50L)
+            } catch (_: InterruptedException) {
+                break
+            }
+        }
+        return null
     }
 
     private fun tsManagerMethod(name: String): Any? {
@@ -873,6 +972,17 @@ class BydAdasController(context: Context) {
         private const val TAG = "BydAdasController"
         private const val DIPILOT_CLASS = "android.hardware.bydauto.dipilot.BYDAutoDiPilotDevice"
         private const val DMS_CLASS = "android.hardware.bydauto.dms.BYDAutoDmsDevice"
+        private const val BODYWORK_CLASS = "android.hardware.bydauto.bodywork.BYDAutoBodyworkDevice"
+
+        private const val READY_WAIT_MS = 20_000L
+        private const val READY_POLL_MS = 250L
+        private const val DMS_CONNECT_WAIT_MS = 5_000L
+        private const val DMS_CONFIRM_WAIT_MS = 1_500L
+        private const val VERIFY_ROUNDS = 3
+        private const val VERIFY_SETTLE_MS = 4_000L
+
+        /** Bodywork hasMessage id Settings uses to pick the 2F0 ELKA getter over 32F. */
+        private const val BODY_MSG_ELKA_2F0 = 143
 
         private const val COMMAND_SUCCESS = 0
         private val COMMAND_ERRORS = setOf(

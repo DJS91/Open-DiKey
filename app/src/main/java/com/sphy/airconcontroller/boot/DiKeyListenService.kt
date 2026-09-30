@@ -82,9 +82,10 @@ class DiKeyListenService : Service() {
     private fun applyAdasCustomProfileIfNeeded() {
         val settings = AppSettings(applicationContext)
         if (settings.adasEditMode != AdasEditMode.CUSTOM || !settings.adasApplyOnBoot) return
-        val results = BydAdasController(applicationContext).applyCustomProfile(settings.adasCustomProfile())
+        val results = BydAdasController(applicationContext).applyCustomProfileVerified(settings.adasCustomProfile())
         val ok = results.count { it.success }
         Log.i(TAG, "auto-applied ADAS custom profile: $ok/${results.size} ok")
+        results.filterNot { it.success }.forEach { Log.w(TAG, "ADAS auto-apply failed: ${it.method}: ${it.detail}") }
     }
 
     private fun startAsForeground() {
