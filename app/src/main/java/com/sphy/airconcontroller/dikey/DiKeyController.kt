@@ -144,32 +144,29 @@ class DiKeyController(
             lastDialTypeRight = displayType
             lastDialValueRight = clamped
         }
-        val rememberForRestore: (() -> Unit)? = if (displayType == DiKeyProtocol.DISPLAY_TYPE_BLANK) {
-            null
-        } else {
-            {
-                val p = pendingRestore
-                pendingRestore = if (left) {
-                    PendingDialRestore(
-                        leftType = displayType,
-                        leftValue = clamped,
-                        rightType = p?.rightType ?: displayType,
-                        rightValue = p?.rightValue ?: clamped
-                    )
-                } else {
-                    PendingDialRestore(
-                        leftType = p?.leftType ?: displayType,
-                        leftValue = p?.leftValue ?: clamped,
-                        rightType = displayType,
-                        rightValue = clamped
-                    )
-                }
-            }
-        }
         writeQueue.addLast(
             OutboundWrite(
                 bytes = DiKeyProtocol.buildDialDisplay(left, displayType, clamped, switchDisplay),
-                onSuccess = rememberForRestore,
+                onSuccess = {
+                    if (displayType != DiKeyProtocol.DISPLAY_TYPE_BLANK) {
+                        val p = pendingRestore
+                        pendingRestore = if (left) {
+                            PendingDialRestore(
+                                leftType = displayType,
+                                leftValue = clamped,
+                                rightType = p?.rightType ?: displayType,
+                                rightValue = p?.rightValue ?: clamped
+                            )
+                        } else {
+                            PendingDialRestore(
+                                leftType = p?.leftType ?: displayType,
+                                leftValue = p?.leftValue ?: clamped,
+                                rightType = displayType,
+                                rightValue = clamped
+                            )
+                        }
+                    }
+                },
                 logLabel = "dial $sideLabel type=0x%02X val=%d switch=%d".format(
                     displayType, clamped, if (switchDisplay) 1 else 0
                 )

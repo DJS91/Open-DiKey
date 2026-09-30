@@ -13,7 +13,8 @@ import java.util.concurrent.Executors
  *
  * While the key is connected, car-side climate changes are mirrored back onto the
  * dials in whichever mode (temp / fan) each dial is currently in. Climate off blanks
- * both dials without changing either dial's mode. All state here is main-thread only.
+ * both dials without changing either dial's mode; turning or clicking a blanked dial powers
+ * climate on. All state here is main-thread only.
  */
 class DiKeyClimateMapper(
     private val ac: BydAcController,
@@ -33,6 +34,10 @@ class DiKeyClimateMapper(
     private var lastLocalInputAt = 0L
     private var polling = false
     private var pollInFlight = false
+    private var powerOnInFlight = false
+    private var powerOnDial: Pair<DialTarget, Boolean>? = null
+    private var wakingLeft = false
+    private var wakingRight = false
 
     private val pollTask = object : Runnable {
         override fun run() {
@@ -59,6 +64,8 @@ class DiKeyClimateMapper(
     fun startSync() {
         shownLeft = null
         shownRight = null
+        wakingLeft = false
+        wakingRight = false
         if (polling) {
             pollCar()
             return
@@ -72,6 +79,8 @@ class DiKeyClimateMapper(
         main.removeCallbacks(pollTask)
         shownLeft = null
         shownRight = null
+        wakingLeft = false
+        wakingRight = false
     }
 
     private fun handleButton(event: DiKeyEvent.Button) {
@@ -103,8 +112,20 @@ class DiKeyClimateMapper(
             else -> null
         }
 
-    /** True while [left]'s LCD is blanked for climate off. */
-    fun isShowingOff(left: Boolean): Boolean = shownOf(left)?.off == true
+    /**
+     * True while [left]'s LCD is blanked for climate off, or waking from it. The key
+     * falls back to its own display type meanwhile, so its events must not be taken as
+     * the dial's mode.
+     */
+    fun isShowingOff(left: Boolean): Boolean = isBlanked(left) || wakingOf(left)
+
+    private fun isBlanked(left: Boolean): Boolean = shownOf(left)?.off == true
+
+    private fun wakingOf(left: Boolean): Boolean = if (left) wakingLeft else wakingRight
+
+    private fun setWaking(left: Boolean, waking: Boolean) {
+        if (left) wakingLeft = waking else wakingRight = waking
+    }
 
     private fun handleEncoder(event: DiKeyEvent.Encoder) {
         val left = event.side == "LEFT"
@@ -112,13 +133,15 @@ class DiKeyClimateMapper(
             cycleDialMode(left)
             return
         }
-        if (isShowingOff(left)) {
+        if (isBlanked(left)) {
             if (event.event == "ROTATE_RIGHT" || event.event == "ROTATE_LEFT") {
-                setShown(left, null)
-                pollCar()
+                val shownMode = DialMode.fromDisplayType(event.displayType)
+                val dial = if (shownMode == modeOf(left)) DialTarget(event.displayType, event.value) else null
+                powerOnFromDial(left, dial, "turned")
             }
             return
         }
+        if (wakingOf(left)) return
         when (event.event) {
             "ROTATE_RIGHT", "ROTATE_LEFT" -> {
                 setShown(left, DialTarget(event.displayType, event.value))
@@ -133,9 +156,66 @@ class DiKeyClimateMapper(
         }
     }
 
+    /**
+     * Using a blanked dial starts climate. A turn also applies the value the key shows
+     * ([dial]; latest wins if more arrive while the start is in flight).
+     */
+    private fun powerOnFromDial(left: Boolean, dial: DialTarget?, action: String) {
+        if (dial != null) {
+            powerOnDial = dial to left
+        } else if (!powerOnInFlight) {
+            powerOnDial = null
+        }
+        lastLocalInputAt = SystemClock.elapsedRealtime()
+        if (powerOnInFlight) return
+        powerOnInFlight = true
+        setWaking(true, isBlanked(true))
+        setWaking(false, isBlanked(false))
+        io.execute {
+            ac.bind()
+            val result = ac.start()
+            main.post {
+                powerOnInFlight = false
+                onLog("Climate · ${if (left) "LEFT" else "RIGHT"} dial $action while off → power on → ${result.detail}")
+                val pending = powerOnDial
+                powerOnDial = null
+                shownLeft = null
+                shownRight = null
+                if (!result.success || pending == null) {
+                    refreshSide(true)
+                    refreshSide(false)
+                    return@post
+                }
+                val (target, dialLeft) = pending
+                val value = DialDisplayType.fromCode(target.displayType)?.clamp(target.value) ?: target.value
+                lastLocalInputAt = SystemClock.elapsedRealtime()
+                setShown(dialLeft, DialTarget(target.displayType, value))
+                setWaking(dialLeft, false)
+                applyDialValue(dialLeft, value)
+                refreshSide(!dialLeft)
+            }
+        }
+    }
+
+    /** Repaint [left] from the car now (ignores the local-input hold); ends its wake. */
+    private fun refreshSide(left: Boolean) {
+        io.execute {
+            val state = readState()
+            main.post {
+                if (state != null) pushSide(left, state)
+                setWaking(left, false)
+            }
+        }
+    }
+
     private fun cycleDialMode(left: Boolean) {
         val next = modeOf(left).next()
         if (left) leftMode = next else rightMode = next
+        if (isBlanked(left)) {
+            powerOnFromDial(left, dial = null, action = "clicked")
+            return
+        }
+        setWaking(left, false)
         setShown(left, null)
         io.execute {
             val state = readState()
