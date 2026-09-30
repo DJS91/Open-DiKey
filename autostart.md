@@ -22,6 +22,7 @@ cold boot.
 | Cold boot | Expected: NotificationManagerService binds approved listeners after boot, starting the process. Needs a real reboot test |
 | App reinstalled (`adb install -r`) | Process comes back on its own; approval survives |
 | App uninstalled | Approval is removed; open the app once with ADB on to re-approve |
+| Settings → "Open app when the car starts" (default off) | `BootAppLauncher` opens `MainActivity` ~3 s after the listener starts with the display on, and on `SCREEN_ON` while running; skipped if an app screen is already started. Falls back to `am start` over local ADB if the background start is dropped |
 
 ---
 
@@ -91,6 +92,7 @@ adb shell cmd notification disallow_listener com.sphy.airconcontroller/com.sphy.
 
 - `boot/KeepAliveNotificationListener.kt` — system-bound wake hook
 - `boot/DiKeyListenService.kt` — foreground USB/BLE listener
+- `boot/BootAppLauncher.kt` — optional "open app on start" (Settings toggle)
 - `adb/AdbKeepAlive.kt` — restores `adb_enabled` after the OTA app clears it
 - `adb/AdbPermissionManager.kt` — on-open grants, including `cmd notification allow_listener`
 - `OpenDiKeyApp` — starts the keep-alive and listener service whenever the process is created

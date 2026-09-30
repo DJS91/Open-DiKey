@@ -4,6 +4,11 @@
   <string name="hub_subtitle">ADB setup for vehicle APIs, then open a test menu.</string>
   <string name="settings_menu_title">Settings</string>
   <string name="debug_menu_title">Debug</string>
+  <string name="settings_startup_title">Startup</string>
+  <string name="settings_open_on_boot">Open app when the car starts</string>
+  <string name="settings_open_on_boot_hint"
+    >Opens the app after the car starts or wakes from standby. The background listener for key functionality runs in the background and autostarts regardless of this setting.</string
+  >
   <string name="settings_updates_title">Updates</string>
   <string name="settings_version_fmt">Installed: %1$s</string>
   <string name="settings_updates_idle">Check GitHub for a newer Open DiKey build.</string>
@@ -85,7 +90,9 @@
   <string name="diag_share">Share</string>
   <string name="diag_copied">Report copied to clipboard</string>
   <string name="diag_run_first">Run diagnostics first</string>
-  <string name="diag_share_unavailable">No app available to share with — use Copy or the saved file</string>
+  <string name="diag_share_unavailable"
+    >No app available to share with — use Copy or the saved file</string
+  >
   <string name="usb_title">USB serial probe</string>
   <string name="usb_status_idle"
     >No USB serial session. If Connect hangs, unplug and replug the USB bridge on this page.</string

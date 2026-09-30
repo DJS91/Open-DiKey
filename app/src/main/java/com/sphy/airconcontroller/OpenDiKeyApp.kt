@@ -3,6 +3,7 @@ package com.sphy.airconcontroller
 import android.app.Application
 import android.content.Context
 import com.sphy.airconcontroller.adb.AdbKeepAlive
+import com.sphy.airconcontroller.boot.BootAppLauncher
 import com.sphy.airconcontroller.boot.DiKeyListenService
 import com.sphy.airconcontroller.dikey.DiKeySession
 
@@ -12,6 +13,7 @@ class OpenDiKeyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        BootAppLauncher.trackActivities(this)
         AdbKeepAlive.start(this)
         dikey = DiKeySession(this)
         dikey.start()

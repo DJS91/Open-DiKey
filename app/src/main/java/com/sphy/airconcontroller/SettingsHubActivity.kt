@@ -9,7 +9,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.adb.AdbPermissionManager
+import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.update.AppUpdater
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +43,12 @@ class SettingsHubActivity : OpenDiKeyActivity() {
             AppUpdater.currentVersionName(this),
         )
         checkButton.setOnClickListener { checkForUpdates() }
+
+        val settings = AppSettings(this)
+        findViewById<SwitchMaterial>(R.id.settingsOpenOnBootSwitch).apply {
+            isChecked = settings.openAppOnBoot
+            setOnCheckedChangeListener { _, checked -> settings.openAppOnBoot = checked }
+        }
     }
 
     private fun checkForUpdates() {

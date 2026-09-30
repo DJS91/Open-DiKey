@@ -45,6 +45,7 @@ class DiKeyListenService : Service() {
         ensureChannel()
         startAsForeground()
         OpenDiKeyApp.from(this).dikey.start()
+        BootAppLauncher.attach(this)
         CONNECT_RETRY_MS.forEach { delayMs ->
             main.postDelayed({ OpenDiKeyApp.from(this).dikey.ensureConnected() }, delayMs)
         }
@@ -73,6 +74,7 @@ class DiKeyListenService : Service() {
     override fun onDestroy() {
         scope.cancel()
         main.removeCallbacksAndMessages(null)
+        BootAppLauncher.detach(this)
         super.onDestroy()
     }
 

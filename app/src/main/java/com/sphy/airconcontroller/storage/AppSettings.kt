@@ -352,6 +352,13 @@ class AppSettings(context: Context) {
             prefs.edit().putBoolean(KEY_ADAS_APPLY_ON_BOOT, value).apply()
         }
 
+    /** Bring the main screen to the front when the head unit starts or wakes. Off until the user opts in. */
+    var openAppOnBoot: Boolean
+        get() = prefs.getBoolean(KEY_OPEN_APP_ON_BOOT, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_OPEN_APP_ON_BOOT, value).apply()
+        }
+
     fun petModeProfile(): PetModeProfile = PetModeProfile(
         fanLevel = prefs.getInt(KEY_PET_FAN_LEVEL, 3).coerceIn(1, 7),
         temperatureC = prefs.getInt(KEY_PET_TEMPERATURE, 21).coerceIn(17, 32),
@@ -533,6 +540,7 @@ class AppSettings(context: Context) {
         private const val KEY_ADAS_CUSTOM_AEB = "adas_custom_aeb"
         private const val KEY_ADAS_CUSTOM_DMS = "adas_custom_dms"
         private const val KEY_ADAS_APPLY_ON_BOOT = "adas_apply_on_boot"
+        private const val KEY_OPEN_APP_ON_BOOT = "open_app_on_boot"
         private const val KEY_PET_FAN_LEVEL = "pet_fan_level"
         private const val KEY_PET_TEMPERATURE = "pet_temperature"
         private const val KEY_PET_RECIRCULATING = "pet_recirculating"
