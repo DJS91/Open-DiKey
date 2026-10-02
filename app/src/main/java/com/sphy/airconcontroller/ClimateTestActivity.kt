@@ -8,9 +8,9 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
-import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydSeatController
+import com.sphy.airconcontroller.storage.PublicDownloads
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -157,19 +157,13 @@ class ClimateTestActivity : OpenDiKeyActivity() {
     private suspend fun persistDump(dump: String): String {
         val file = File(getExternalFilesDir(null) ?: filesDir, "ac-dump.txt")
         file.writeText(dump)
-        // Shark DiLink: /data/local/tmp is not writable — mirror to sdcard for adb pull.
-        runCatching {
-            AdbPermissionManager.runShellCommand(
-                this,
-                "cp ${file.absolutePath} /sdcard/ac-dump.txt"
-            )
-        }
-        Log.w(DUMP_TAG, "dump begin ${dump.lineSequence().count()} lines -> ${file.absolutePath}")
+        val path = PublicDownloads.saveText(this, "ac-dump.txt", dump) ?: file.absolutePath
+        Log.w(DUMP_TAG, "dump begin ${dump.lineSequence().count()} lines -> $path")
         dump.lineSequence().forEach { line ->
             if (line.isNotEmpty()) Log.w(DUMP_TAG, line.take(4000))
         }
-        Log.w(DUMP_TAG, "dump end — pull /sdcard/ac-dump.txt or ${file.absolutePath}")
-        return file.absolutePath
+        Log.w(DUMP_TAG, "dump end — pull $path")
+        return path
     }
 
     companion object {

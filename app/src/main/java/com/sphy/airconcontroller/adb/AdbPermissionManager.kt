@@ -82,16 +82,25 @@ object AdbPermissionManager {
     )
 
     private val BACKGROUND_LAUNCH_GRANTS = listOf(
-        "pm grant \$pkg android.permission.SYSTEM_ALERT_WINDOW",
-        "appops set \$pkg SYSTEM_ALERT_WINDOW allow",
-        "appops set \$pkg START_ACTIVITIES_FROM_BACKGROUND allow",
-        "cmd appops set \$pkg START_ACTIVITIES_FROM_BACKGROUND allow",
+        "pm grant \$user\$pkg android.permission.SYSTEM_ALERT_WINDOW",
+        "appops set \$user\$pkg SYSTEM_ALERT_WINDOW allow",
+        "appops set \$user\$pkg START_ACTIVITIES_FROM_BACKGROUND allow",
+        "cmd appops set \$user\$pkg START_ACTIVITIES_FROM_BACKGROUND allow",
         "dumpsys deviceidle whitelist +\$pkg",
-        "appops set \$pkg RUN_IN_BACKGROUND allow",
-        "appops set \$pkg RUN_ANY_IN_BACKGROUND allow",
-        "appops set \$pkg WAKE_LOCK allow",
-        "cmd notification allow_listener \$pkg/${KeepAliveNotificationListener::class.java.name}",
+        "appops set \$user\$pkg RUN_IN_BACKGROUND allow",
+        "appops set \$user\$pkg RUN_ANY_IN_BACKGROUND allow",
+        "appops set \$user\$pkg WAKE_LOCK allow",
+        "cmd notification allow_listener \$pkg/${KeepAliveNotificationListener::class.java.name}\$userSuffix",
     )
+
+    /**
+     * Android user the app runs as. Multi-user head units (e.g. DiLink 100F / Shark) run apps
+     * as user 10 while the adb shell grants to user 0 by default.
+     */
+    fun appUserId(): Int = android.os.Process.myUid() / 100_000
+
+    /** `--user N ` for pm/appops on secondary users; empty on user 0 so legacy commands are unchanged. */
+    fun userFlag(): String = appUserId().let { if (it == 0) "" else "--user $it " }
 
     sealed class SetupState {
         object Idle : SetupState()
@@ -143,7 +152,8 @@ object AdbPermissionManager {
 
     fun isSetupComplete(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(PREF_PERMISSIONS_GRANTED, false)) return true
+        // Older builds cached success after granting to user 0 only; on secondary users verify for real.
+        if (appUserId() == 0 && prefs.getBoolean(PREF_PERMISSIONS_GRANTED, false)) return true
         return checkPermissionsGranted(context)
     }
 
@@ -309,16 +319,21 @@ object AdbPermissionManager {
     private fun applyVehicleApiAccess(dadb: Dadb, pkg: String, hiddenApiConsent: Boolean) {
         BYDAUTO_PERMISSIONS.forEach { perm ->
             runCatching {
-                val r = dadb.shell("pm grant $pkg $perm")
+                val r = dadb.shell("pm grant ${userFlag()}$pkg $perm")
                 val ok = r.exitCode == 0 || r.allOutput.contains("Success", ignoreCase = true)
                 if (!ok && r.allOutput.isNotBlank()) Log.d(TAG, "grant $perm: ${r.allOutput.trim()}")
             }
         }
         if (hiddenApiConsent) applyHiddenApiExemptionIfNeeded(dadb)
         else Log.i(TAG, "hidden-api exemption skipped (no consent)")
+        val userId = appUserId()
         BACKGROUND_LAUNCH_GRANTS.forEach { cmd ->
             runCatching {
-                val r = dadb.shell(cmd.replace("\$pkg", pkg))
+                val r = dadb.shell(
+                    cmd.replace("\$userSuffix", if (userId == 0) "" else " $userId")
+                        .replace("\$user", userFlag())
+                        .replace("\$pkg", pkg)
+                )
                 if (r.allOutput.isNotBlank()) Log.d(TAG, "bg-launch: $cmd -> ${r.allOutput.trim()}")
             }
         }
@@ -363,7 +378,7 @@ object AdbPermissionManager {
             var allGranted = true
 
             REQUIRED_PERMISSIONS.forEach { perm ->
-                val result = dadb.shell("pm grant $pkg $perm")
+                val result = dadb.shell("pm grant ${userFlag()}$pkg $perm")
                 val ok = result.exitCode == 0 || result.allOutput.contains("Success", ignoreCase = true)
                 Log.i(TAG, "grant $perm: ${if (ok) "ok" else "fail"} (${result.allOutput.trim()})")
                 if (!ok) allGranted = false

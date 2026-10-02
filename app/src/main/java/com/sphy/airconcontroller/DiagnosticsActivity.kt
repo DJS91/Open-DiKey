@@ -12,8 +12,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
-import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.diagnostics.DiagnosticsRunner
+import com.sphy.airconcontroller.storage.PublicDownloads
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,15 +91,13 @@ class DiagnosticsActivity : OpenDiKeyActivity() {
         }
     }
 
-    private suspend fun persist(text: String): String {
+    private fun persist(text: String): String {
         val file = File(getExternalFilesDir(null) ?: filesDir, REPORT_NAME)
         file.writeText(text)
         shareFile().writeText(text)
-        runCatching {
-            AdbPermissionManager.runShellCommand(this, "cp ${file.absolutePath} /sdcard/$REPORT_NAME")
-        }
+        val publicPath = PublicDownloads.saveText(this, REPORT_NAME, text)
         text.lineSequence().forEach { if (it.isNotEmpty()) Log.i(TAG, it.take(4000)) }
-        return file.absolutePath
+        return publicPath ?: file.absolutePath
     }
 
     private fun shareFile(): File =

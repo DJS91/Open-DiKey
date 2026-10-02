@@ -160,8 +160,8 @@ class SettingsHubActivity : OpenDiKeyActivity() {
         AdbPermissionManager.runShellBatch(
             this,
             listOf(
-                "appops set $pkg REQUEST_INSTALL_PACKAGES allow",
-                "cmd appops set $pkg REQUEST_INSTALL_PACKAGES allow",
+                "appops set ${AdbPermissionManager.userFlag()}$pkg REQUEST_INSTALL_PACKAGES allow",
+                "cmd appops set ${AdbPermissionManager.userFlag()}$pkg REQUEST_INSTALL_PACKAGES allow",
             ),
         )
         if (AppUpdater.canInstallPackages(this)) return true
