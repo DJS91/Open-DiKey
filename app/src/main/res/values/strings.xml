@@ -83,7 +83,7 @@
   <string name="diag_run">Run diagnostics</string>
   <string name="diag_write_test">Climate write test</string>
   <string name="diag_write_test_body"
-    >This changes the driver temperature and fan speed by one step, reads them back, then restores them. Start the car (READY) with climate on first.</string
+    >This changes temperature, fan speed, wind mode and recirculation by one step, reads them back, then restores them. It also turns the AC off and back on (or on and back off). Start the car (READY) first.</string
   >
   <string name="diag_write_test_run">Run test</string>
   <string name="diag_copy">Copy</string>

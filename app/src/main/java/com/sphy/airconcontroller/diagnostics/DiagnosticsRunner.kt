@@ -24,6 +24,7 @@ import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.boot.DiKeyListenService
 import com.sphy.airconcontroller.byd.BydAcController
+import com.sphy.airconcontroller.byd.BydAcServiceClient
 import com.sphy.airconcontroller.byd.BydPermissionContext
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.Dilink5SdkInjector
@@ -115,6 +116,7 @@ class DiagnosticsRunner(
         if (!ac.bind()) {
             line("bind failed: ${ac.lastBindError}")
             check(Status.FAIL, "AC bind", ac.lastBindError ?: "unknown")
+            acServiceWriteTest(onProgress)
             return buildReport("Open DiKey climate write test")
         }
         val before = ac.snapshot()
@@ -170,7 +172,182 @@ class DiagnosticsRunner(
 
         line("After:")
         line(ac.snapshot().toDisplayString().prependIndent("  "))
+        acServiceWriteTest(onProgress)
         return buildReport("Open DiKey climate write test")
+    }
+
+    /**
+     * Same idea over `com.byd.acservice`: each step writes, polls for readback, then restores.
+     * Areas are tried in order until one both reads valid data and reacts to the write.
+     */
+    private suspend fun acServiceWriteTest(onProgress: (String) -> Unit) {
+        section("AC service write test (${BydAcServiceClient.PACKAGE})")
+        onProgress("Binding AC service…")
+        val svc = BydAcServiceClient(app)
+        if (!svc.bind()) {
+            line("bind failed: ${svc.lastError}")
+            check(Status.FAIL, "AC service bind", svc.lastError ?: "unknown")
+            return
+        }
+        check(Status.PASS, "AC service bind", "connected")
+        try {
+            line("PropertyValue constructors: ${svc.propertyValueConstructors().joinToString()}")
+            line("isAcOnline=${svc.callInfo("isAcOnline")} acType=${svc.callInfo("getAcType")} " +
+                "frontAcType=${svc.callInfo("getFrontAcTypeConfig")} multiArea=${svc.callInfo("isMultiArea")}")
+            line()
+            line("Before:")
+            dumpServiceState(svc)
+
+            val power = firstValidRead(svc, BydAcServiceClient.PROP_POWER, SVC_GLOBAL_AREAS)
+            line()
+            line("Power read: ${power?.let { "area ${it.first} = ${it.second}" } ?: "no valid area"}")
+            val startedOff = power != null && power.second != SVC_ON
+            if (startedOff) {
+                onProgress("Turning AC on…")
+                serviceStep(svc, "Power ON", BydAcServiceClient.PROP_POWER, listOf(power!!.first), restore = false) { SVC_ON }
+            }
+
+            onProgress("Testing driver temperature…")
+            serviceTempStep(svc, "Driver temp", SVC_DRIVER_AREAS)
+            onProgress("Testing passenger temperature…")
+            serviceTempStep(svc, "Passenger temp", SVC_PASSENGER_AREAS)
+            onProgress("Testing fan level…")
+            serviceStep(svc, "Fan level", BydAcServiceClient.PROP_WIND_LEVEL, SVC_GLOBAL_AREAS) { before ->
+                when (before) {
+                    in 1..6 -> before + 1
+                    7 -> 6
+                    else -> 3
+                }
+            }
+            onProgress("Testing wind mode…")
+            serviceStep(svc, "Wind mode", BydAcServiceClient.PROP_WIND_MODE, SVC_GLOBAL_AREAS) { before ->
+                if (before in 1..7) (if (before == 1) 2 else 1) else null
+            }
+            onProgress("Testing recirculation…")
+            serviceStep(svc, "Recirculation", BydAcServiceClient.PROP_INTERNAL_CYCLE, SVC_GLOBAL_AREAS) { before ->
+                when (before) {
+                    0 -> 1
+                    1 -> 0
+                    else -> null
+                }
+            }
+
+            if (power != null) {
+                onProgress("Testing AC power off…")
+                val offOk = serviceStep(svc, "Power OFF", BydAcServiceClient.PROP_POWER, listOf(power.first), restore = false) { 0 } ||
+                    serviceStep(svc, "Power OFF (alt value 2)", BydAcServiceClient.PROP_POWER, listOf(power.first), restore = false) { 2 }
+                if (!startedOff || !offOk) {
+                    onProgress("Restoring AC power…")
+                    serviceStep(svc, "Power restore", BydAcServiceClient.PROP_POWER, listOf(power.first), restore = false) { power.second }
+                }
+            }
+
+            line()
+            line("After:")
+            dumpServiceState(svc)
+        } finally {
+            svc.unbind()
+        }
+    }
+
+    private fun dumpServiceState(svc: BydAcServiceClient) {
+        for ((label, id) in AC_PROBE_PROPERTIES) {
+            val values = SVC_ALL_AREAS.joinToString(" · ") { area ->
+                val r = svc.get(id, area)
+                "a$area=${r.error?.let { "err $it" } ?: r.value}"
+            }
+            line("  $label ($id): $values")
+        }
+    }
+
+    private fun firstValidRead(svc: BydAcServiceClient, id: Int, areas: List<Int>): Pair<Int, Int>? =
+        areas.firstNotNullOfOrNull { area -> svc.get(id, area).int?.takeIf(::validServiceValue)?.let { area to it } }
+
+    private fun validServiceValue(v: Int): Boolean = v != BydAcServiceClient.ERROR_STATUS && v != -1
+
+    /** Polls until the value moves away from [before] (or hits [want]); returns the last read. */
+    private suspend fun pollServiceValue(svc: BydAcServiceClient, id: Int, area: Int, before: Int?, want: Int): Int? {
+        var last: Int? = null
+        val deadline = SystemClock.elapsedRealtime() + SVC_READBACK_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            delay(SVC_POLL_MS)
+            last = svc.get(id, area).int
+            if (last == want || (last != null && last != before)) return last
+        }
+        return last
+    }
+
+    /**
+     * Writes `target(before)` on each candidate area until the readback changes; restores the
+     * original value afterwards when [restore]. Returns true when a write took effect.
+     */
+    private suspend fun serviceStep(
+        svc: BydAcServiceClient,
+        label: String,
+        id: Int,
+        areas: List<Int>,
+        restore: Boolean = true,
+        target: (Int) -> Int?,
+    ): Boolean {
+        line()
+        line("$label (id $id):")
+        for (area in areas) {
+            val before = svc.get(id, area).int
+            if (before == null || !validServiceValue(before)) {
+                line("  area $area: read ${before ?: "null"} — skipped")
+                continue
+            }
+            val want = target(before)
+            if (want == null) {
+                line("  area $area: value $before not testable — skipped")
+                continue
+            }
+            val err = svc.set(id, area, want)
+            val after = pollServiceValue(svc, id, area, before, want)
+            line("  area $area: set $before → $want: ${err ?: "ok"} · readback $after")
+            if (err == null && restore) {
+                val restoreErr = svc.set(id, area, before)
+                val restored = pollServiceValue(svc, id, area, want, before)
+                line("  area $area: restore → $before: ${restoreErr ?: "ok"} · readback $restored")
+            }
+            if (err == null && after == want) {
+                check(Status.PASS, "Service $label", "area $area: $before → $want confirmed")
+                return true
+            }
+        }
+        check(Status.FAIL, "Service $label", "no area changed (see section)")
+        return false
+    }
+
+    /** Temperature via setBydAutoAcValue first, then the service's own changeTemp(pv, flag). */
+    private suspend fun serviceTempStep(svc: BydAcServiceClient, label: String, areas: List<Int>) {
+        val step: (Int) -> Int? = { before ->
+            when {
+                before !in SVC_TEMP_RANGE -> null
+                before >= SVC_TEMP_RANGE.last -> before - 1
+                else -> before + 1
+            }
+        }
+        if (serviceStep(svc, label, BydAcServiceClient.PROP_TEMPERATURE, areas, target = step)) return
+
+        for (flag in listOf(false, true)) {
+            for (area in areas) {
+                val before = svc.get(BydAcServiceClient.PROP_TEMPERATURE, area).int ?: continue
+                val want = step(before) ?: continue
+                val reply = svc.changeTemp(area, want, flag)
+                val after = pollServiceValue(svc, BydAcServiceClient.PROP_TEMPERATURE, area, before, want)
+                line("  changeTemp(area $area, $want, $flag): " +
+                    "${reply.fold({ "reply=$it" }, { "err ${it.javaClass.simpleName}: ${it.message}" })} · readback $after")
+                if (reply.isSuccess) {
+                    svc.changeTemp(area, before, flag)
+                    line("    restore → $before · readback ${pollServiceValue(svc, BydAcServiceClient.PROP_TEMPERATURE, area, want, before)}")
+                }
+                if (after == want) {
+                    check(Status.PASS, "Service $label (changeTemp)", "area $area flag=$flag: $before → $want confirmed")
+                    return
+                }
+            }
+        }
     }
 
     // region sections
@@ -604,11 +781,30 @@ class DiagnosticsRunner(
                     val (l, t) = callAidlReads(loader, subBinder, subDescriptor)
                     live += l
                     total += t
+                    if (subDescriptor == AC_CONDITIONER_INTERFACE) acPropertyReads(loader, subBinder)
                 }
             }
             return AcAppProbe(live, total, true)
         } finally {
             runCatching { app.unbindService(conn) }
+        }
+    }
+
+    /** `getBydAutoAcValue(id, area)` for the climate properties, across candidate areas. */
+    private fun acPropertyReads(loader: ClassLoader, binder: IBinder) {
+        val iface = asAidlInterface(loader, AC_CONDITIONER_INTERFACE, binder).getOrNull() ?: return
+        val get = iface.javaClass.methods.firstOrNull {
+            it.name == "getBydAutoAcValue" && it.parameterCount == 2
+        } ?: return line("    getBydAutoAcValue(int, int) unavailable")
+        line()
+        line("    getBydAutoAcValue(id, area) — areas ${AC_PROBE_AREAS.joinToString()}:")
+        for ((label, id) in AC_PROBE_PROPERTIES) {
+            val values = AC_PROBE_AREAS.joinToString(" · ") { area ->
+                val v = runCatching { get.invoke(iface, id, area) }
+                    .fold({ it?.toString() ?: "null" }, { "err ${unwrap(it).javaClass.simpleName}" })
+                "a$area=$v"
+            }
+            line("      $label ($id): $values")
         }
     }
 
@@ -988,6 +1184,32 @@ class DiagnosticsRunner(
         private const val AC_APP_PACKAGE = "com.byd.acservice"
         private const val AC_APP_ACTION = "com.byd.ac.AC_SERVICE"
         private const val AC_ROOT_INTERFACE = "com.byd.ac.IBydAcService"
+        private const val AC_CONDITIONER_INTERFACE = "com.byd.ac.IAcAirConditioner"
+        private val AC_PROBE_AREAS = listOf(0, 256, 272)
+        private val SVC_ALL_AREAS = listOf(0, 256, 272, 1, 2)
+        private val SVC_GLOBAL_AREAS = listOf(0, 256, 1)
+        private val SVC_DRIVER_AREAS = listOf(256, 1, 0)
+        private val SVC_PASSENGER_AREAS = listOf(272, 2)
+        private val SVC_TEMP_RANGE = 17..33
+        private const val SVC_ON = 1
+        private const val SVC_READBACK_MS = 3_000L
+        private const val SVC_POLL_MS = 300L
+        private val AC_PROBE_PROPERTIES = listOf(
+            "power" to 101,
+            "temperature" to 102,
+            "wind level" to 103,
+            "compressor" to 104,
+            "front defrost" to 107,
+            "rear defrost" to 108,
+            "internal cycle" to 109,
+            "temp sync" to 110,
+            "wind mode" to 113,
+            "ctrl mode" to 114,
+            "temp unit" to 115,
+            "max hot" to 130,
+            "front power" to 136,
+            "work mode" to 138,
+        )
         private const val AC_BIND_TIMEOUT_MS = 4_000L
         private val AC_CONSTANT_CLASSES = listOf(
             "com.byd.ac.BydAcManager",
@@ -999,6 +1221,7 @@ class DiagnosticsRunner(
             "com.byd.ac.PropertyIds\$AirOutlet",
             "com.byd.ac.PropertyIds\$AcSetting",
             "com.byd.ac.PropertyIds\$CarDialog",
+            "com.byd.ac.PropertyValue",
         )
         private val AC_SUBSERVICE_GUESSES = listOf(
             "AirConditioner", "air_conditioner", "IAcAirConditioner", "AcAirConditioner",

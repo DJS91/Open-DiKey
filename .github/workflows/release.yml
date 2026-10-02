@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -25,7 +27,30 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
+      - name: Check for firmware changes
+        id: firmware
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BIN=dikey-usb-bridge-c3.bin
+          PREV_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
+          BUILD=true
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous release — building firmware."
+          elif ! git rev-parse -q --verify "refs/tags/$PREV_TAG" >/dev/null; then
+            echo "Tag $PREV_TAG not found locally — building firmware."
+          elif ! git diff --quiet "$PREV_TAG" HEAD -- firmware/; then
+            echo "firmware/ changed since $PREV_TAG — building firmware."
+          elif gh release download "$PREV_TAG" -p "$BIN" -D firmware --clobber; then
+            echo "firmware/ unchanged since $PREV_TAG — reusing its $BIN."
+            BUILD=false
+          else
+            echo "Could not download $BIN from $PREV_TAG — building firmware."
+          fi
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-python@v5
+        if: steps.firmware.outputs.build == 'true'
         with:
           python-version: "3.12"
 
@@ -78,9 +103,11 @@ jobs:
           mv app/build/outputs/apk/release/app-release.apk dist/open-dikey.apk
 
       - name: Install PlatformIO
+        if: steps.firmware.outputs.build == 'true'
         run: pip install -U platformio
 
       - name: Build firmware
+        if: steps.firmware.outputs.build == 'true'
         working-directory: firmware
         run: pio run
 
