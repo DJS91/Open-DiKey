@@ -10,6 +10,7 @@ import android.content.pm.PermissionInfo
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.IBinder
 import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
@@ -24,7 +25,9 @@ import com.sphy.airconcontroller.byd.BydPermissionContext
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.Dilink5SdkInjector
 import com.sphy.airconcontroller.usb.UsbHostSerial
+import dalvik.system.PathClassLoader
 import kotlinx.coroutines.delay
+import java.io.File
 import java.io.InputStream
 import java.lang.reflect.InvocationTargetException
 import java.text.SimpleDateFormat
@@ -68,6 +71,7 @@ class DiagnosticsRunner(
             Step("SDK classes and injection") { sdkClasses() },
             Step("BYD device binding") { deviceBinding() },
             Step("Climate controller") { climate() },
+            Step("AC service probe") { acServiceProbe() },
             Step("Vehicle info") { vehicleInfo() },
             Step("DiKey connection") { dikeyConnection() },
             Step("USB devices") { usbDevices() },
@@ -433,7 +437,7 @@ class DiagnosticsRunner(
         var live = 0
         for (m in getters) {
             val value = runCatching { m.invoke(device) }.fold({ it.toString() }, { "err ${unwrap(it).javaClass.simpleName}" })
-            if (value.toIntOrNull()?.let { it !in SENTINELS } == true) live++
+            if (m.name !in DEVICE_CONSTANT_GETTERS && value.toIntOrNull()?.let { it !in SENTINELS } == true) live++
             line("    ${m.name} = $value")
         }
         for ((zone, zoneName) in listOf(1 to "driver", 2 to "passenger", 4 to "outside")) {
@@ -448,6 +452,100 @@ class DiagnosticsRunner(
             "$live/${getters.size} return non-sentinel values",
         )
     }
+
+    /**
+     * Read-only look at the standalone `byd_airconditioning` binder service and its client
+     * jar. Some head units (DiLink 100F) refuse BYDAutoAcDevice reads but may expose AC here.
+     */
+    private fun acServiceProbe() {
+        val binderResult = runCatching {
+            Class.forName("android.os.ServiceManager")
+                .getMethod("getService", String::class.java)
+                .invoke(null, AC_SERVICE) as? IBinder
+        }
+        val binder = binderResult.getOrNull()
+        kv(
+            "ServiceManager.getService($AC_SERVICE)",
+            binder?.let { "${it.javaClass.name} alive=${it.isBinderAlive}" }
+                ?: binderResult.exceptionOrNull()?.let { "err ${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" }
+                ?: "null",
+        )
+        val descriptor = runCatching { binder?.interfaceDescriptor }.getOrNull()
+        kv("Interface descriptor", descriptor)
+
+        val jar = File(AC_JAR)
+        kv("$AC_JAR readable", jar.canRead())
+        val classNames = if (jar.canRead()) acJarClasses(jar) else emptyList()
+        val loader = if (jar.canRead()) PathClassLoader(jar.path, app.classLoader) else app.classLoader
+        line("Classes in jar (${classNames.size}):")
+        var printed = 0
+        for (name in classNames) {
+            val cls = runCatching { Class.forName(name, false, loader) }
+            line("  ${if (cls.isSuccess) "✓" else "✗"} $name")
+            val c = cls.getOrNull() ?: continue
+            for (m in c.declaredMethods.sortedBy { it.name }) {
+                if (printed >= MAX_AC_JAR_METHODS) break
+                line("      ${m.name}(${m.parameterTypes.joinToString { it.simpleName }}):${m.returnType.simpleName}")
+                printed++
+            }
+        }
+        if (printed >= MAX_AC_JAR_METHODS) line("  … method list truncated at $MAX_AC_JAR_METHODS")
+
+        var live = 0
+        var total = 0
+        if (binder != null && descriptor != null) {
+            val proxy = runCatching {
+                Class.forName("$descriptor\$Stub", true, loader)
+                    .getMethod("asInterface", IBinder::class.java)
+                    .invoke(null, binder)
+            }
+            line()
+            line("Service read-only calls via $descriptor:")
+            val iface = proxy.getOrNull()
+            if (iface == null) {
+                line("  asInterface failed: ${proxy.exceptionOrNull()?.let { "${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" }}")
+            } else {
+                val getters = iface.javaClass.methods
+                    .filter { m ->
+                        m.parameterCount == 0 && READ_PREFIXES.any { m.name.startsWith(it) } &&
+                            m.declaringClass.name.startsWith(descriptor) && m.name != "getInterfaceDescriptor"
+                    }
+                    .sortedBy { it.name }
+                    .take(MAX_GETTERS)
+                for (m in getters) {
+                    total++
+                    val value = runCatching { m.invoke(iface) }
+                        .fold({ it.toString() }, { "err ${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" })
+                    if (!value.startsWith("err ")) live++
+                    line("  ${m.name} = $value")
+                }
+                if (getters.isEmpty()) line("  (no zero-arg get/is/has methods on the interface)")
+            }
+        }
+        check(
+            when {
+                binder == null -> Status.FAIL
+                live > 0 -> Status.PASS
+                else -> Status.WARN
+            },
+            "AC service ($AC_SERVICE)",
+            if (binder == null) "service not reachable" else "$live/$total read calls answered · ${descriptor ?: "no descriptor"}",
+        )
+    }
+
+    private fun acJarClasses(jar: File): List<String> = runCatching {
+        ZipFile(jar).use { zip ->
+            zip.entries().asSequence()
+                .filter { DEX_ENTRY.matches(it.name) }
+                .flatMap { entry ->
+                    val text = zip.getInputStream(entry).use { String(it.readBytes(), Charsets.ISO_8859_1) }
+                    AC_CLASS_DESCRIPTOR.findAll(text).map { it.groupValues[1].replace('/', '.') }
+                }
+                .distinct()
+                .sorted()
+                .toList()
+        }
+    }.getOrDefault(emptyList())
 
     private fun climate() {
         val ac = BydAcController(app)
@@ -763,6 +861,13 @@ class DiagnosticsRunner(
         )
 
         private val SENTINELS = setOf(-1, -2147482645, -2147482646, -2147482647, -2147482648, 65535)
+        private val DEVICE_CONSTANT_GETTERS = setOf("getType", "getDevicetype")
+
+        private const val AC_SERVICE = "byd_airconditioning"
+        private const val AC_JAR = "/system/framework/com.byd.ac.jar"
+        private const val MAX_AC_JAR_METHODS = 400
+        private val AC_CLASS_DESCRIPTOR = Regex("L(com/byd/ac/[A-Za-z0-9_/$]+);")
+        private val READ_PREFIXES = listOf("get", "is", "has")
 
         private const val ADB_ID = "id"
         private const val ADB_HIDDEN_POLICY = "settings get global hidden_api_policy"
@@ -779,6 +884,10 @@ class DiagnosticsRunner(
             "appops get \$pkg",
             "dumpsys deviceidle whitelist | grep -i \$pkg",
             "dumpsys usb | grep -iE 'port|mode|role|connected|host' | head -n 60",
+            "service check byd_airconditioning",
+            "dumpsys byd_airconditioning 2>&1 | head -n 80",
+            "dumpsys package com.byd.airconditioning | grep -iE 'userId|sharedUser|permission|Service' | head -n 80",
+            "dumpsys package com.byd.acservice | grep -iE 'userId|sharedUser|permission|Service' | head -n 80",
         )
     }
 }
