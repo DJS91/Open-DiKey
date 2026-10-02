@@ -609,9 +609,21 @@ class DiagnosticsRunner(
         val proc = ProcessBuilder(
             "logcat", "-d", "-v", "time", "-t", LOGCAT_LINES.toString(), "--pid", Process.myPid().toString(),
         ).redirectErrorStream(true).start()
-        val out = proc.inputStream.bufferedReader().readText()
-        proc.waitFor(LOGCAT_TIMEOUT_S, TimeUnit.SECONDS)
-        line(out.trim().ifBlank { "(empty)" })
+        val out = StringBuffer()
+        val reader = Thread {
+            runCatching {
+                proc.inputStream.bufferedReader().forEachLine { out.append(it).append('\n') }
+            }
+        }.apply { isDaemon = true; start() }
+        // Android 13+ holds logcat open while the "access all device logs" consent prompt is pending.
+        if (!proc.waitFor(LOGCAT_TIMEOUT_S, TimeUnit.SECONDS)) {
+            proc.destroyForcibly()
+            reader.join(500)
+            line("(logcat timed out after ${LOGCAT_TIMEOUT_S}s — check for a log-access prompt on screen)")
+        } else {
+            reader.join(1_000)
+        }
+        line(out.toString().trim().ifBlank { "(empty)" })
     }
 
     // endregion
