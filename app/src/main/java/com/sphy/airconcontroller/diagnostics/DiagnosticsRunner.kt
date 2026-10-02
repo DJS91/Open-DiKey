@@ -3,7 +3,10 @@ package com.sphy.airconcontroller.diagnostics
 import android.Manifest
 import android.app.ActivityManager
 import android.bluetooth.BluetoothManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
@@ -33,6 +36,7 @@ import java.lang.reflect.InvocationTargetException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
@@ -491,46 +495,159 @@ class DiagnosticsRunner(
         }
         if (printed >= MAX_AC_JAR_METHODS) line("  … method list truncated at $MAX_AC_JAR_METHODS")
 
-        var live = 0
-        var total = 0
         if (binder != null && descriptor != null) {
-            val proxy = runCatching {
-                Class.forName("$descriptor\$Stub", true, loader)
-                    .getMethod("asInterface", IBinder::class.java)
-                    .invoke(null, binder)
-            }
             line()
             line("Service read-only calls via $descriptor:")
-            val iface = proxy.getOrNull()
-            if (iface == null) {
-                line("  asInterface failed: ${proxy.exceptionOrNull()?.let { "${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" }}")
-            } else {
-                val getters = iface.javaClass.methods
-                    .filter { m ->
-                        m.parameterCount == 0 && READ_PREFIXES.any { m.name.startsWith(it) } &&
-                            m.declaringClass.name.startsWith(descriptor) && m.name != "getInterfaceDescriptor"
-                    }
-                    .sortedBy { it.name }
-                    .take(MAX_GETTERS)
-                for (m in getters) {
-                    total++
-                    val value = runCatching { m.invoke(iface) }
-                        .fold({ it.toString() }, { "err ${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" })
-                    if (!value.startsWith("err ")) live++
-                    line("  ${m.name} = $value")
-                }
-                if (getters.isEmpty()) line("  (no zero-arg get/is/has methods on the interface)")
-            }
+            callAidlReads(loader, binder, descriptor)
         }
         check(
+            if (binder == null) Status.INFO else Status.PASS,
+            "AC service ($AC_SERVICE)",
+            if (binder == null) "not visible to apps (expected; app service is the client path)" else "reachable · $descriptor",
+        )
+
+        line()
+        line("Client-library constants:")
+        val stringConstants = dumpAcConstants(loader)
+
+        line()
+        line("Bound app service ($AC_APP_PACKAGE · $AC_APP_ACTION):")
+        val serviceNames = (stringConstants + AC_SUBSERVICE_GUESSES).distinct()
+        val (live, total, bound) = probeAcAppService(loader, serviceNames)
+        check(
             when {
-                binder == null -> Status.FAIL
+                !bound -> Status.FAIL
                 live > 0 -> Status.PASS
                 else -> Status.WARN
             },
-            "AC service ($AC_SERVICE)",
-            if (binder == null) "service not reachable" else "$live/$total read calls answered · ${descriptor ?: "no descriptor"}",
+            "AC app service",
+            if (!bound) "could not bind $AC_APP_PACKAGE" else "$live/$total read calls answered",
         )
+    }
+
+    /** Prints static fields of the client library's constant holders; returns the String values. */
+    private fun dumpAcConstants(loader: ClassLoader): List<String> {
+        val strings = mutableListOf<String>()
+        for (name in AC_CONSTANT_CLASSES) {
+            val cls = runCatching { Class.forName(name, true, loader) }.getOrNull() ?: continue
+            line("  $name")
+            cls.declaredConstructors.forEach { c ->
+                line("    <init>(${c.parameterTypes.joinToString { it.simpleName }})")
+            }
+            cls.declaredFields
+                .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && !it.isSynthetic }
+                .sortedBy { it.name }
+                .forEach { f ->
+                    val v = runCatching { f.isAccessible = true; f.get(null) }.getOrNull()
+                    if (v is String) strings += v
+                    if (v == null || v is String || v is Number || v is Boolean) line("    ${f.name} = $v")
+                }
+        }
+        return strings
+    }
+
+    private data class AcAppProbe(val live: Int, val total: Int, val bound: Boolean)
+
+    /** Binds the same service `BydAcManager.connect()` uses and reads each sub-interface. */
+    private fun probeAcAppService(loader: ClassLoader, serviceNames: List<String>): AcAppProbe {
+        val latch = CountDownLatch(1)
+        var service: IBinder? = null
+        val conn = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                service = binder
+                latch.countDown()
+            }
+            override fun onServiceDisconnected(name: ComponentName?) {}
+            override fun onNullBinding(name: ComponentName?) {
+                latch.countDown()
+            }
+        }
+        val intent = Intent(AC_APP_ACTION).setPackage(AC_APP_PACKAGE)
+        val bindResult = runCatching { app.bindService(intent, conn, Context.BIND_AUTO_CREATE) }
+        kv("  bindService", bindResult.fold({ it.toString() }, { "err ${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" }))
+        if (bindResult.getOrNull() != true) {
+            runCatching { app.unbindService(conn) }
+            return AcAppProbe(0, 0, false)
+        }
+        try {
+            latch.await(AC_BIND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val root = service
+            if (root == null) {
+                line("  no binder within ${AC_BIND_TIMEOUT_MS}ms")
+                return AcAppProbe(0, 0, false)
+            }
+            val rootDescriptor = runCatching { root.interfaceDescriptor }.getOrNull() ?: AC_ROOT_INTERFACE
+            line("  connected · $rootDescriptor")
+            var (live, total) = callAidlReads(loader, root, rootDescriptor)
+
+            val rootIface = asAidlInterface(loader, rootDescriptor, root).getOrNull()
+            val getService = rootIface?.javaClass?.methods?.firstOrNull {
+                it.name == "getService" && it.parameterTypes.contentEquals(arrayOf(String::class.java))
+            }
+            if (getService == null) {
+                line("  getService(String) unavailable on $rootDescriptor")
+                return AcAppProbe(live, total, true)
+            }
+            for (name in serviceNames) {
+                val sub = runCatching { getService.invoke(rootIface, name) as? IBinder }
+                val subBinder = sub.getOrNull()
+                val subDescriptor = runCatching { subBinder?.interfaceDescriptor }.getOrNull()
+                val shown = when {
+                    sub.isFailure -> "err ${unwrap(sub.exceptionOrNull()!!).javaClass.simpleName}: ${unwrap(sub.exceptionOrNull()!!).message}"
+                    subBinder == null -> null
+                    else -> subDescriptor ?: "binder (no descriptor)"
+                }
+                if (shown == null) continue
+                line()
+                line("  getService(\"$name\") = $shown")
+                if (subBinder != null && subDescriptor != null) {
+                    val (l, t) = callAidlReads(loader, subBinder, subDescriptor)
+                    live += l
+                    total += t
+                }
+            }
+            return AcAppProbe(live, total, true)
+        } finally {
+            runCatching { app.unbindService(conn) }
+        }
+    }
+
+    private fun asAidlInterface(loader: ClassLoader, descriptor: String, binder: IBinder) = runCatching {
+        Class.forName("$descriptor\$Stub", true, loader)
+            .getMethod("asInterface", IBinder::class.java)
+            .invoke(null, binder)!!
+    }
+
+    /** Calls zero-arg get/is/has methods on an AIDL proxy; returns (answered, attempted). */
+    private fun callAidlReads(loader: ClassLoader, binder: IBinder, descriptor: String): Pair<Int, Int> {
+        val proxy = asAidlInterface(loader, descriptor, binder)
+        val iface = proxy.getOrNull()
+        if (iface == null) {
+            line("    asInterface failed: ${proxy.exceptionOrNull()?.let { "${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" }}")
+            return 0 to 0
+        }
+        val getters = iface.javaClass.methods
+            .filter { m ->
+                m.parameterCount == 0 && READ_PREFIXES.any { m.name.startsWith(it) } &&
+                    m.declaringClass.name.startsWith(descriptor) && m.name != "getInterfaceDescriptor"
+            }
+            .sortedBy { it.name }
+            .take(MAX_GETTERS)
+        var live = 0
+        for (m in getters) {
+            val value = runCatching { m.invoke(iface) }
+                .fold({ fmtValue(it) }, { "err ${unwrap(it).javaClass.simpleName}: ${unwrap(it).message}" })
+            if (!value.startsWith("err ")) live++
+            line("    ${m.name} = $value")
+        }
+        if (getters.isEmpty()) line("    (no zero-arg get/is/has methods)")
+        return live to getters.size
+    }
+
+    private fun fmtValue(v: Any?): String = when (v) {
+        is IntArray -> v.contentToString()
+        is Array<*> -> v.contentToString()
+        else -> v.toString()
     }
 
     private fun acJarClasses(jar: File): List<String> = runCatching {
@@ -868,6 +985,25 @@ class DiagnosticsRunner(
         private const val MAX_AC_JAR_METHODS = 400
         private val AC_CLASS_DESCRIPTOR = Regex("L(com/byd/ac/[A-Za-z0-9_/$]+);")
         private val READ_PREFIXES = listOf("get", "is", "has")
+        private const val AC_APP_PACKAGE = "com.byd.acservice"
+        private const val AC_APP_ACTION = "com.byd.ac.AC_SERVICE"
+        private const val AC_ROOT_INTERFACE = "com.byd.ac.IBydAcService"
+        private const val AC_BIND_TIMEOUT_MS = 4_000L
+        private val AC_CONSTANT_CLASSES = listOf(
+            "com.byd.ac.BydAcManager",
+            "com.byd.ac.BydAcFeatures",
+            "com.byd.ac.BydAcFeatures\$AirConditioner",
+            "com.byd.ac.BydAcFeatures\$Seat",
+            "com.byd.ac.PropertyIds",
+            "com.byd.ac.PropertyIds\$AirConditioner",
+            "com.byd.ac.PropertyIds\$AirOutlet",
+            "com.byd.ac.PropertyIds\$AcSetting",
+            "com.byd.ac.PropertyIds\$CarDialog",
+        )
+        private val AC_SUBSERVICE_GUESSES = listOf(
+            "AirConditioner", "air_conditioner", "IAcAirConditioner", "AcAirConditioner",
+            "AirClean", "AcSetting", "Fragrance", "SeatVentilationHeating",
+        )
 
         private const val ADB_ID = "id"
         private const val ADB_HIDDEN_POLICY = "settings get global hidden_api_policy"
@@ -887,7 +1023,8 @@ class DiagnosticsRunner(
             "service check byd_airconditioning",
             "dumpsys byd_airconditioning 2>&1 | head -n 80",
             "dumpsys package com.byd.airconditioning | grep -iE 'userId|sharedUser|permission|Service' | head -n 80",
-            "dumpsys package com.byd.acservice | grep -iE 'userId|sharedUser|permission|Service' | head -n 80",
+            "dumpsys package com.byd.acservice | grep -iE -A3 'Service Resolver|singleUser|exported|BIND_' | head -n 40",
+            "dumpsys activity services com.byd.acservice | head -n 60",
         )
     }
 }
