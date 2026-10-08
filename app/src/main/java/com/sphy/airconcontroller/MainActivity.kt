@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.adb.AdbPermissionManager
+import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
@@ -101,6 +102,10 @@ class MainActivity : OpenDiKeyActivity() {
     override fun onStart() {
         super.onStart()
         session.ensureConnected()
+        // Re-kick ADAS auto-apply here too: if the process was already spun up at boot by
+        // KeepAliveNotificationListener before the car's ADAS services were ready, opening the
+        // app won't recreate the process/service, so nothing else would retry it.
+        AdasAutoApplyCoordinator.ensureApplied(this)
     }
 
     override fun onNewIntent(intent: Intent) {

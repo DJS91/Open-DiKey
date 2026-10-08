@@ -19,10 +19,7 @@ import com.sphy.airconcontroller.MainActivity
 import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.R
 import com.sphy.airconcontroller.adb.AdbPermissionManager
-import com.sphy.airconcontroller.byd.BydAdasController
 import com.sphy.airconcontroller.lighting.LightingScheduler
-import com.sphy.airconcontroller.storage.AdasEditMode
-import com.sphy.airconcontroller.storage.AppSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -61,13 +58,16 @@ class DiKeyListenService : Service() {
             if (!AdbPermissionManager.isSetupComplete(applicationContext)) {
                 AdbPermissionManager.runSetup(applicationContext)
             }
-            applyAdasCustomProfileIfNeeded()
+            AdasAutoApplyCoordinator.ensureApplied(applicationContext)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground()
         OpenDiKeyApp.from(this).dikey.ensureConnected()
+        // Covers restarts while the process stays alive (e.g. manual app open re-triggering
+        // startForegroundService without a fresh onCreate) — no-ops if already applied/running.
+        AdasAutoApplyCoordinator.ensureApplied(applicationContext)
         return START_STICKY
     }
 
@@ -76,16 +76,6 @@ class DiKeyListenService : Service() {
         main.removeCallbacksAndMessages(null)
         BootAppLauncher.detach(this)
         super.onDestroy()
-    }
-
-    /** Re-apply the saved Custom ADAS profile on launch instead of waiting for a manual Apply tap. */
-    private fun applyAdasCustomProfileIfNeeded() {
-        val settings = AppSettings(applicationContext)
-        if (settings.adasEditMode != AdasEditMode.CUSTOM || !settings.adasApplyOnBoot) return
-        val results = BydAdasController(applicationContext).applyCustomProfileVerified(settings.adasCustomProfile())
-        val ok = results.count { it.success }
-        Log.i(TAG, "auto-applied ADAS custom profile: $ok/${results.size} ok")
-        results.filterNot { it.success }.forEach { Log.w(TAG, "ADAS auto-apply failed: ${it.method}: ${it.detail}") }
     }
 
     private fun startAsForeground() {
