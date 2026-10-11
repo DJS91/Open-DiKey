@@ -19,6 +19,9 @@ class DebugHubActivity : OpenDiKeyActivity() {
         findViewById<android.view.View>(R.id.openDiagnosticsButton).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
+        findViewById<android.view.View>(R.id.openAdasLogButton).setOnClickListener {
+            startActivity(Intent(this, AdasAutoApplyLogActivity::class.java))
+        }
         findViewById<android.view.View>(R.id.openAdbServiceButton).setOnClickListener {
             openBydAdbServiceMenu()
         }

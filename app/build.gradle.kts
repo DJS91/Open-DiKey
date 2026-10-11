@@ -1,3 +1,7 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -14,9 +18,16 @@ android {
         applicationId = "com.sphy.airconcontroller"
         minSdk = 30
         targetSdk = 36
-        // Overridden by CI (-PversionName / -PversionCode). Local defaults are fine for debug.
+        // Overridden by CI (-PversionName / -PversionCode) for real releases. Local/dev builds
+        // (no -P flags passed) get a timestamp-based name instead of a static placeholder, so
+        // Settings -> "Installed: ..." and the home screen's version label can tell apart
+        // multiple local debug APKs installed in a row, the same way CI's own "vYYYY.MM.DD-HHMM"
+        // release tags do (see release.yml).
         versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
-        versionName = (findProperty("versionName") as String?) ?: "1.0-dev"
+        versionName = (findProperty("versionName") as String?) ?: run {
+            val stamp = SimpleDateFormat("yyyy.MM.dd-HHmm", Locale.US).format(Date())
+            "$stamp-local"
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

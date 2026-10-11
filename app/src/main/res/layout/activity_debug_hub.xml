@@ -76,6 +76,35 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/openAdasLogButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_feature_tile"
+            android:clickable="true"
+            android:clipToOutline="true"
+            android:focusable="true"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_adas_log"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/menu_adas_log_desc"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                android:textColor="@color/text_muted" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/openAdbServiceButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

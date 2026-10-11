@@ -158,13 +158,40 @@ class BydAdasController(context: Context) {
     }
 
     /**
+     * True only if DiPilot is bound *and* every current value already matches [profile] — i.e. no
+     * writes are needed. Returns false (rather than throwing/guessing) when unbound or any value
+     * is unreadable, since "unknown" must not be treated as "already applied".
+     *
+     * The car resets these toggles on its own power cycles (see class doc), but our process can
+     * survive a head-unit sleep/wake with no restart — so a previous successful apply earlier in
+     * the same process does not guarantee the car's current state still matches; callers that
+     * cache a "did we already apply this process?" flag should re-verify with this on every
+     * app-open rather than trusting that flag alone.
+     */
+    fun matchesProfile(profile: AdasCustomProfile): Boolean {
+        val snap = snapshot()
+        if (!snap.diPilotBound) return false
+        val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
+            ?: LaneDepartureMode.BOTH
+        return snap.elka == profile.elka &&
+            snap.laneDeparture == lda &&
+            snap.aeb == profile.aeb &&
+            snap.driverMonitor == profile.dms
+    }
+
+    /**
      * Auto-apply path for a freshly started process (app launch, cold boot, restart after standby).
      * Waits for the async OEM adapters (DiPilot CarAssist, DMS SettingsAdapter) because their
      * setters silently drop writes while still connecting, then re-reads each setting and
      * re-applies any that did not stick. Result order matches [applyCustomProfile].
+     *
+     * [onLog] receives a line for every readiness check, write, and verify round so a caller can
+     * persist the detail (e.g. [com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator] does, to
+     * diagnose intermittent cold-boot failures after the fact).
      */
-    fun applyCustomProfileVerified(profile: AdasCustomProfile): List<CommandResult> {
+    fun applyCustomProfileVerified(profile: AdasCustomProfile, onLog: (String) -> Unit = {}): List<CommandResult> {
         val ready = awaitReady(READY_WAIT_MS)
+        onLog("awaitReady -> $ready (carAssist/DMS binder wait, timeout=${READY_WAIT_MS}ms)")
         val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
             ?: LaneDepartureMode.BOTH
         val steps: List<Pair<() -> CommandResult, () -> Boolean?>> = listOf(
@@ -174,19 +201,25 @@ class BydAdasController(context: Context) {
             { setDriverMonitoringCamera(profile.dms) } to { readDmsEnabled()?.let { it == profile.dms } },
         )
         val results = steps.map { it.first() }.toMutableList()
+        results.forEach { onLog("initial write ${it.method}: success=${it.success} (${it.detail})") }
 
         for (round in 1..VERIFY_ROUNDS) {
             sleepQuietly(VERIFY_SETTLE_MS)
             val states = steps.map { it.second() }
             val pending = steps.indices.filter { states[it] != true }
-            Log.i(TAG, "auto-apply verify round $round (ready=$ready): states=$states pending=$pending")
+            val roundMsg = "verify round $round (ready=$ready): states=$states pending=$pending"
+            Log.i(TAG, "auto-apply $roundMsg")
+            onLog(roundMsg)
             if (pending.isEmpty()) return results
             if (round == VERIFY_ROUNDS) {
                 return results.mapIndexed { i, r ->
                     if (states[i] == false) r.copy(success = false, detail = "did not stick after retries (${r.detail})") else r
                 }
             }
-            pending.forEach { results[it] = steps[it].first() }
+            pending.forEach {
+                results[it] = steps[it].first()
+                onLog("retry write ${results[it].method}: success=${results[it].success} (${results[it].detail})")
+            }
         }
         return results
     }

@@ -67,6 +67,20 @@
   <string name="menu_usb_desc">Raw serial to the C3 USB bridge</string>
   <string name="menu_vehicle_dump">Vehicle dump</string>
   <string name="menu_vehicle_dump_desc">Raw live snapshot and method dump</string>
+  <string name="menu_adas_log">ADAS auto-apply log</string>
+  <string name="menu_adas_log_desc"
+    >Target vs. actual ADAS values logged on every boot auto-apply attempt</string
+  >
+  <string name="adas_log_title">ADAS Auto-Apply Log</string>
+  <string name="adas_log_empty"
+    >No auto-apply attempts logged yet. This fills in automatically whenever the app/service
+    starts with ADAS auto-apply enabled — including attempts that ran before you opened the
+    app, e.g. right after a cold boot.</string
+  >
+  <string name="adas_log_clear">Clear</string>
+  <string name="adas_log_live">● LIVE</string>
+  <string name="adas_log_copied">Log copied to clipboard</string>
+  <string name="adas_log_cleared">Log cleared</string>
   <string name="menu_diagnostics">Diagnostics report</string>
   <string name="menu_diagnostics_desc"
     >Test ADB, permissions, BYD SDK, USB bridge and DiKey, then share the report</string

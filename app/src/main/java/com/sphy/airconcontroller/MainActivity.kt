@@ -11,6 +11,7 @@ import android.os.Looper
 import android.view.MotionEvent
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -20,12 +21,14 @@ import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
+import com.sphy.airconcontroller.update.AppUpdater
 import com.sphy.airconcontroller.usb.UsbPermissionReceiver
 import kotlinx.coroutines.launch
 
 class MainActivity : OpenDiKeyActivity() {
     private lateinit var session: DiKeySession
     private lateinit var connStatus: android.widget.TextView
+    private lateinit var adasIcon: android.widget.ImageView
 
     private val adasHoldHandler = Handler(Looper.getMainLooper())
     private var adasHoldFired = false
@@ -40,6 +43,8 @@ class MainActivity : OpenDiKeyActivity() {
 
         session = OpenDiKeyApp.from(this).dikey
         connStatus = findViewById(R.id.mainConnStatus)
+        adasIcon = findViewById(R.id.homeAdasIcon)
+        findViewById<android.widget.TextView>(R.id.homeVersionText).text = AppUpdater.currentVersionName(this)
 
         findViewById<android.view.View>(R.id.homeColorsButton).setOnClickListener {
             startActivity(Intent(this, ColorConfigActivity::class.java))
@@ -90,6 +95,16 @@ class MainActivity : OpenDiKeyActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 session.status.collect { connStatus.text = it }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                AdasAutoApplyCoordinator.succeeded.collect { succeeded ->
+                    val color = if (succeeded) R.color.tyre_ok else R.color.accent_orange
+                    adasIcon.imageTintList =
+                        android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this@MainActivity, color))
+                }
             }
         }
 

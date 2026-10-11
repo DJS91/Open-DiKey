@@ -41,6 +41,15 @@
                 android:textColor="@color/text_muted" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/homeVersionText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/text_muted"
+            tools:text="2026.10.11-1227-local" />
+
         <ImageButton
             android:id="@+id/mainDebugButton"
             android:layout_width="48dp"
@@ -234,6 +243,7 @@
                 android:padding="28dp">
 
                 <ImageView
+                    android:id="@+id/homeAdasIcon"
                     android:layout_width="80dp"
                     android:layout_height="80dp"
                     android:layout_marginBottom="16dp"
