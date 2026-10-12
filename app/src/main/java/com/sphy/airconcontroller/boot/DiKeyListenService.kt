@@ -53,12 +53,13 @@ class DiKeyListenService : Service() {
                 main.postDelayed(this, LIGHTING_TICK_MS)
             }
         }, LIGHTING_TICK_MS)
+        VehicleStateWatcher.start(applicationContext)
         scope.launch {
             AdbPermissionManager.ensureVehicleApiAccess(applicationContext)
             if (!AdbPermissionManager.isSetupComplete(applicationContext)) {
                 AdbPermissionManager.runSetup(applicationContext)
             }
-            AdasAutoApplyCoordinator.ensureApplied(applicationContext)
+            AdasAutoApplyCoordinator.ensureApplied(applicationContext, reason = "service-start")
         }
     }
 

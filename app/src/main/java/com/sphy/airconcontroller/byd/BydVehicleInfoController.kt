@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.SystemClock
 import android.util.Log
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.CountDownLatch
@@ -337,6 +338,53 @@ class BydVehicleInfoController(context: Context) {
             speedKmh = num(speed, "getCurrentSpeed"),
             accelPedalPct = num(speed, "getAccelerateDeepness"),
             brakePedalPct = num(speed, "getBrakeDeepness"),
+        )
+    }
+
+    /** Both gearbox getters, read independently so a caller can tell which one tracks the shifter. */
+    data class GearReads(val gear: Int?, val autoMode: Int?) {
+        override fun toString() = "getGear=${gear ?: "—"} getGearboxAutoModeType=${autoMode ?: "—"}"
+    }
+
+    private val lastRebindAt = HashMap<String, Long>()
+
+    /**
+     * Returns the bound device, retrying one that was null at first bind: at boot the BYD service
+     * may not be up yet, and [devices] already holds a null entry so [bind] would never run again.
+     * Throttled so an unavailable device doesn't hammer the loader (and Logcat) on every poll.
+     */
+    private fun deviceOrRebind(label: String): Any? {
+        devices[label]?.let { return it }
+        val now = SystemClock.elapsedRealtime()
+        if (now - (lastRebindAt[label] ?: 0L) < REBIND_INTERVAL_MS) return null
+        lastRebindAt[label] = now
+        Dilink5SdkInjector.ensure(appContext)
+        val className = DEVICE_CLASSES.firstOrNull { it.first == label }?.second ?: return null
+        return loadInstance(className).also { devices[label] = it }
+    }
+
+    /** Lightweight gearbox probe for [com.sphy.airconcontroller.boot.VehicleStateWatcher]. */
+    fun readGear(): GearReads? {
+        if (devices.isEmpty()) bind()
+        val gearbox = deviceOrRebind("Gearbox") ?: return null
+        val reads = GearReads(
+            gear = num(gearbox, "getGear")?.toInt(),
+            autoMode = num(gearbox, "getGearboxAutoModeType")?.toInt(),
+        )
+        return reads.takeIf { it.gear != null || it.autoMode != null }
+    }
+
+    /** Vehicle power signals; a null field means that getter was unavailable or returned a sentinel. */
+    data class PowerReads(val powerLevel: Int?, val energyMode: Int?) {
+        override fun toString() = "powerLevel=${powerLevel ?: "—"} energyMode=${energyMode ?: "—"}"
+    }
+
+    /** Lightweight power probe (Bodywork power level + Energy mode) for the watcher. */
+    fun readPowerState(): PowerReads {
+        if (devices.isEmpty()) bind()
+        return PowerReads(
+            powerLevel = deviceOrRebind("Bodywork")?.let { num(it, "getPowerLevel")?.toInt() },
+            energyMode = deviceOrRebind("Energy")?.let { num(it, "getEnergyMode")?.toInt() },
         )
     }
 
@@ -783,6 +831,7 @@ class BydVehicleInfoController(context: Context) {
     }
 
     companion object {
+        private const val REBIND_INTERVAL_MS = 5_000L
         private const val TAG = "BydVehicleInfo"
         /** Plausible remaining usable energy (kWh) for passenger BYDs. */
         private const val USABLE_KWH_MIN = 0.5

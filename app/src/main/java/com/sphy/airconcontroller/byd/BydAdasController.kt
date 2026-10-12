@@ -168,15 +168,29 @@ class BydAdasController(context: Context) {
      * cache a "did we already apply this process?" flag should re-verify with this on every
      * app-open rather than trusting that flag alone.
      */
-    fun matchesProfile(profile: AdasCustomProfile): Boolean {
+    fun matchesProfile(profile: AdasCustomProfile): Boolean = compareProfile(profile) == ProfileCheck.MATCH
+
+    /** Outcome of comparing the car's live ADAS state with a profile; UNKNOWN means it couldn't be read reliably. */
+    enum class ProfileCheck { MATCH, MISMATCH, UNKNOWN }
+
+    /**
+     * Like [matchesProfile] but distinguishes a *definite* mismatch (a value was read and differs)
+     * from an unreadable/unbound state, so callers don't treat a transient failed read as "the car
+     * was reset".
+     */
+    fun compareProfile(profile: AdasCustomProfile): ProfileCheck {
         val snap = snapshot()
-        if (!snap.diPilotBound) return false
+        if (!snap.diPilotBound) return ProfileCheck.UNKNOWN
         val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
             ?: LaneDepartureMode.BOTH
-        return snap.elka == profile.elka &&
-            snap.laneDeparture == lda &&
-            snap.aeb == profile.aeb &&
-            snap.driverMonitor == profile.dms
+        val pairs = listOf(
+            snap.elka to profile.elka,
+            snap.laneDeparture to lda,
+            snap.aeb to profile.aeb,
+            snap.driverMonitor to profile.dms,
+        )
+        if (pairs.any { (actual, expected) -> actual != null && actual != expected }) return ProfileCheck.MISMATCH
+        return if (pairs.any { it.first == null }) ProfileCheck.UNKNOWN else ProfileCheck.MATCH
     }
 
     /**
