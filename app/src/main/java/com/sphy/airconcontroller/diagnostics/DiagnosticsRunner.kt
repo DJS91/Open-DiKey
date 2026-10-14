@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
 import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.adb.AdbPermissionManager
+import com.sphy.airconcontroller.apps.ProjectionApps
 import com.sphy.airconcontroller.boot.DiKeyListenService
 import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydAcServiceClient
@@ -82,6 +83,7 @@ class DiagnosticsRunner(
             Step("USB devices") { usbDevices() },
             Step("USB bridge query") { usbBridgeQuery() },
             Step("Bluetooth") { bluetooth() },
+            Step("Phone projection apps") { projection() },
             Step("Background running") { background() },
             Step("ADB shell probes") { adbProbes() },
             Step("Live DiKey log") { liveLogSection() },
@@ -979,6 +981,18 @@ class DiagnosticsRunner(
             if (dikey) Status.PASS else Status.INFO,
             "DiKey seen over BLE",
             if (dikey) "yes" else "no (normal when the USB bridge owns the DiKey)",
+        )
+    }
+
+    /** What the home screen's CarPlay / Android Auto shortcut sees. Run once connected and once not. */
+    private fun projection() {
+        val found = ProjectionApps.find(app)
+        kv("Home shortcut would show", found?.let { "${it.label} (${it.packageName})" } ?: "no — nothing listed")
+        ProjectionApps.report(app).forEach { line("  $it") }
+        check(
+            Status.INFO,
+            "Phone projection apps",
+            found?.let { "listed: ${it.label}" } ?: "none listed (phone not connected?)",
         )
     }
 

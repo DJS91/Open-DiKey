@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -20,13 +21,17 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.adb.AdbPermissionManager
+import com.sphy.airconcontroller.apps.ProjectionApps
 import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.update.AppUpdater
 import com.sphy.airconcontroller.usb.UsbPermissionReceiver
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : OpenDiKeyActivity() {
     private lateinit var session: DiKeySession
@@ -128,6 +133,7 @@ class MainActivity : OpenDiKeyActivity() {
             }
         }
 
+        setUpProjectionShortcut()
         maybePromptHiddenApiConsent()
         startAdbSetupIfNeeded()
         handleLaunchIntent(intent)
@@ -173,6 +179,45 @@ class MainActivity : OpenDiKeyActivity() {
         dotPulse?.cancel()
         dotPulse = null
         connDot.alpha = 1f
+    }
+
+    /**
+     * Shows a shortcut to the car's CarPlay / Android Auto app, but only while that app is listed
+     * (i.e. a phone is connected). Re-checked every few seconds while this screen is visible.
+     */
+    private fun setUpProjectionShortcut() {
+        val tile = findViewById<android.view.View>(R.id.homeProjectionButton)
+        val icon = findViewById<android.widget.ImageView>(R.id.homeProjectionIcon)
+        val title = findViewById<android.widget.TextView>(R.id.homeProjectionTitle)
+        var shown: ProjectionApps.Entry? = null
+
+        tile.setOnClickListener {
+            val entry = shown ?: return@setOnClickListener
+            runCatching { startActivity(entry.launchIntent) }.onFailure {
+                Toast.makeText(this, getString(R.string.projection_open_failed, entry.label), Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    val entry = withContext(Dispatchers.Default) {
+                        runCatching { ProjectionApps.find(this@MainActivity) }.getOrNull()
+                    }
+                    if (entry?.packageName != shown?.packageName) {
+                        if (entry != null) {
+                            icon.setImageDrawable(entry.icon)
+                            title.text = entry.label
+                            tile.contentDescription = entry.label
+                        }
+                        // INVISIBLE, not GONE: the slot stays reserved so the other tiles keep their size.
+                        tile.visibility = if (entry != null) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                    }
+                    shown = entry
+                    delay(PROJECTION_POLL_MS)
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -276,6 +321,7 @@ class MainActivity : OpenDiKeyActivity() {
         private const val BT_PERMISSION_REQUEST = 1001
         private const val ADAS_HOLD_MS = 5_000L
         private const val DOT_PULSE_MS = 800L
+        private const val PROJECTION_POLL_MS = 3_000L
         private const val DOT_PULSE_MIN_ALPHA = 0.2f
     }
 }

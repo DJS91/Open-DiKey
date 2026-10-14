@@ -406,10 +406,48 @@
                     android:layout_marginEnd="12dp"
                     android:layout_weight="1" />
 
-                <Space
+                <!-- Phone projection shortcut: always the last slot of this row (under Sentry); invisible, not gone, so the other tiles keep their size. -->
+                <LinearLayout
+                    android:id="@+id/homeProjectionButton"
                     android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_feature_tile"
+                    android:clickable="true"
+                    android:clipToOutline="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="28dp"
+                    android:visibility="invisible">
+
+                    <ImageView
+                        android:id="@+id/homeProjectionIcon"
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:layout_marginBottom="16dp"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/homeProjectionTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_horizontal"
+                        android:minLines="2"
+                        android:text="@string/projection_home_subtitle"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                        android:textColor="@color/text_muted" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

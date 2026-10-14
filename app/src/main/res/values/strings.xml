@@ -4,6 +4,8 @@
   <string name="hub_subtitle">ADB setup for vehicle APIs, then open a test menu.</string>
   <string name="settings_menu_title">Settings</string>
   <string name="debug_menu_title">Debug</string>
+  <string name="projection_home_subtitle">Phone connected — tap to switch</string>
+  <string name="projection_open_failed">Couldn\'t open %1$s</string>
   <string name="settings_appearance_title">Appearance</string>
   <string name="settings_theme_mode_label">Color mode</string>
   <string name="settings_theme_dark">Dark mode</string>
