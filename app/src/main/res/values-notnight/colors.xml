@@ -4,14 +4,14 @@
     overridden here; the accent orange and the white-on-accent text are shared by both.
 -->
 <resources>
-    <color name="classic_bg">#FFEEF1F5</color>
+    <color name="classic_bg">#FFDCE1E8</color>
     <color name="classic_surface">#FFFFFFFF</color>
-    <color name="classic_stroke">#FFD3D9E0</color>
+    <color name="classic_stroke">#FFC2C9D3</color>
     <color name="classic_divider">#33101214</color>
     <color name="classic_text">#FF14181D</color>
     <color name="classic_muted">#FF5A6572</color>
 
-    <color name="modern_bg">#FFF4F5F7</color>
+    <color name="modern_bg">#FFE2E5EA</color>
     <color name="modern_surface">#FFFFFFFF</color>
     <color name="modern_stroke">#FFE3E5EA</color>
     <color name="modern_divider">#33101214</color>
