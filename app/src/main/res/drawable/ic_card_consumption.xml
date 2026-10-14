@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gauge dial with a needle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3,16 A9,9 0 0 1 21,16 M12,16 L16.5,10.5 M3.5,19 H20.5 M12,6.5 V8 M6,9 L7,10 M18,9 L17,10"
+        android:strokeColor="@color/accent_orange"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -17,6 +17,13 @@
         android:paddingEnd="12dp"
         android:paddingBottom="8dp">
 
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="14dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_logo" />
+
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -31,14 +38,30 @@
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/mainConnStatus"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="@string/dikey_status_idle"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
-                android:textColor="@color/text_muted" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/mainConnDot"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_status_dot"
+                    android:backgroundTint="@color/text_muted" />
+
+                <TextView
+                    android:id="@+id/mainConnStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/dikey_state_disconnected"
+                    android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                    android:textColor="@color/text_muted" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView

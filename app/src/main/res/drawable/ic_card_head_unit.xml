@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Head unit screen on a stand. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,5 H19 a2,2 0 0 1 2,2 V15 a2,2 0 0 1 -2,2 H5 a2,2 0 0 1 -2,-2 V7 a2,2 0 0 1 2,-2 Z M12,17 V20 M8,20 H16"
+        android:strokeColor="@color/accent_orange"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

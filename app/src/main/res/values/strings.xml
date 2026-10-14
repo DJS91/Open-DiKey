@@ -4,6 +4,16 @@
   <string name="hub_subtitle">ADB setup for vehicle APIs, then open a test menu.</string>
   <string name="settings_menu_title">Settings</string>
   <string name="debug_menu_title">Debug</string>
+  <string name="settings_appearance_title">Appearance</string>
+  <string name="settings_theme_mode_label">Color mode</string>
+  <string name="settings_theme_dark">Dark mode</string>
+  <string name="settings_theme_light">Light mode</string>
+  <string name="settings_theme_system">Follow system</string>
+  <string name="settings_theme_hint">Follow system matches the head unit\'s current day/night setting and changes with it.</string>
+  <string name="settings_theme_style_label">Style</string>
+  <string name="settings_style_classic">Classic</string>
+  <string name="settings_style_modern">Alternative</string>
+  <string name="settings_style_hint">Alternative uses a solid background and flat square tiles with no borders. Works with dark and light mode.</string>
   <string name="settings_startup_title">Startup</string>
   <string name="settings_open_on_boot">Open app when the car starts</string>
   <string name="settings_open_on_boot_hint"
@@ -145,6 +155,9 @@
     >USB bridge open — waiting for the C3 to connect to DiKey…</string
   >
   <string name="dikey_auto_connecting">Found %1$s — connecting…</string>
+  <string name="dikey_state_connected">Buttons connected</string>
+  <string name="dikey_state_connecting">Connecting to Buttons…</string>
+  <string name="dikey_state_disconnected">Buttons not connected</string>
   <string name="dikey_input_section">Button / dial events</string>
   <string name="dikey_event_log_empty">Events will appear here after connect.</string>
   <string name="dikey_clear_log">Clear event log</string>

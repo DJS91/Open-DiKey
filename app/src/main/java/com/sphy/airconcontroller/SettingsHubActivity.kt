@@ -8,11 +8,15 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.ThemeMode
+import com.sphy.airconcontroller.storage.ThemeStyle
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
+import com.sphy.airconcontroller.ui.ThemeManager
 import com.sphy.airconcontroller.update.AppUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,6 +52,44 @@ class SettingsHubActivity : OpenDiKeyActivity() {
         findViewById<SwitchMaterial>(R.id.settingsOpenOnBootSwitch).apply {
             isChecked = settings.openAppOnBoot
             setOnCheckedChangeListener { _, checked -> settings.openAppOnBoot = checked }
+        }
+        setUpThemeToggle(settings)
+        setUpStyleToggle(settings)
+    }
+
+    private fun setUpStyleToggle(settings: AppSettings) {
+        val toggle = findViewById<MaterialButtonToggleGroup>(R.id.settingsStyleToggle)
+        val buttonFor = mapOf(
+            ThemeStyle.CLASSIC to R.id.settingsStyleClassic,
+            ThemeStyle.MODERN to R.id.settingsStyleModern,
+        )
+        toggle.check(buttonFor.getValue(settings.themeStyle))
+        toggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val style = buttonFor.entries.first { it.value == checkedId }.key
+            if (style == settings.themeStyle) return@addOnButtonCheckedListener
+            settings.themeStyle = style
+            // Other open screens notice the change when they resume (see OpenDiKeyActivity).
+            recreate()
+        }
+    }
+
+    private fun setUpThemeToggle(settings: AppSettings) {
+        val toggle = findViewById<MaterialButtonToggleGroup>(R.id.settingsThemeToggle)
+        val buttonFor = mapOf(
+            ThemeMode.DARK to R.id.settingsThemeDark,
+            ThemeMode.LIGHT to R.id.settingsThemeLight,
+            ThemeMode.SYSTEM to R.id.settingsThemeSystem,
+        )
+        // Check before adding the listener so restoring the saved choice doesn't re-apply it.
+        toggle.check(buttonFor.getValue(settings.themeMode))
+        toggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val mode = buttonFor.entries.first { it.value == checkedId }.key
+            if (mode == settings.themeMode) return@addOnButtonCheckedListener
+            settings.themeMode = mode
+            // Recreates this and any other open screens in the new palette.
+            ThemeManager.apply(mode)
         }
     }
 

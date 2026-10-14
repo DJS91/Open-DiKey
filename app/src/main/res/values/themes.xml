@@ -2,51 +2,102 @@
     <!-- Base application theme. -->
     <style name="Theme.AirconController" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
         <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/accent_orange</item>
-        <item name="colorPrimaryVariant">@color/bg_dark</item>
+        <item name="colorPrimary">@color/classic_accent</item>
+        <item name="colorPrimaryVariant">@color/classic_bg</item>
         <item name="colorOnPrimary">@color/white</item>
         <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/accent_orange</item>
-        <item name="colorSecondaryVariant">@color/accent_orange</item>
+        <item name="colorSecondary">@color/classic_accent</item>
+        <item name="colorSecondaryVariant">@color/classic_accent</item>
         <item name="colorOnSecondary">@color/white</item>
         <!-- Status bar color. -->
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
-        <item name="android:windowBackground">@color/bg_dark</item>
+        <item name="android:windowBackground">@color/classic_bg</item>
+        <!-- Also defines the palette attributes so anything inflated against the app theme can resolve them. -->
+        <item name="dkBgBase">@color/classic_bg</item>
+        <item name="dkSurface">@color/classic_surface</item>
+        <item name="dkSurfaceStroke">@color/classic_stroke</item>
+        <item name="dkDividerSoft">@color/classic_divider</item>
+        <item name="dkTextPrimary">@color/classic_text</item>
+        <item name="dkTextMuted">@color/classic_muted</item>
+        <item name="dkAccent">@color/classic_accent</item>
+        <item name="dkAccentSoft">@color/classic_accent_soft</item>
+        <item name="dkHeading">@color/classic_accent</item>
+        <item name="dkTileRadius">20dp</item>
+        <item name="dkCardRadius">16dp</item>
+        <item name="dkOutlineWidth">1dp</item>
         <!-- Customize your theme here. -->
     </style>
 
+    <!--
+        Screens use one of two styles, chosen in Settings (see ThemeStyle / OpenDiKeyActivity):
+        Theme.OpenDiKey is Classic; Theme.OpenDiKey.Modern restyles it. Within each, the dark or light
+        palette comes from resource qualifiers (values/ = dark, values-notnight/ = light), which
+        AppCompatDelegate.setDefaultNightMode (see ThemeManager) switches, and "Follow system" lets
+        Android decide.
+    -->
     <style name="Theme.OpenDiKey" parent="Theme.MaterialComponents.NoActionBar">
-        <item name="colorPrimary">@color/accent_orange</item>
-        <item name="colorPrimaryVariant">@color/bg_dark</item>
+        <item name="dkBgBase">@color/classic_bg</item>
+        <item name="dkSurface">@color/classic_surface</item>
+        <item name="dkSurfaceStroke">@color/classic_stroke</item>
+        <item name="dkDividerSoft">@color/classic_divider</item>
+        <item name="dkTextPrimary">@color/classic_text</item>
+        <item name="dkTextMuted">@color/classic_muted</item>
+        <item name="dkAccent">@color/classic_accent</item>
+        <item name="dkAccentSoft">@color/classic_accent_soft</item>
+        <item name="dkHeading">@color/classic_accent</item>
+        <item name="dkTileRadius">20dp</item>
+        <item name="dkCardRadius">16dp</item>
+        <item name="dkOutlineWidth">1dp</item>
+
+        <item name="colorPrimary">?attr/dkAccent</item>
+        <item name="colorPrimaryVariant">?attr/dkBgBase</item>
         <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSecondary">@color/accent_orange</item>
+        <item name="colorSecondary">?attr/dkAccent</item>
         <item name="colorOnSecondary">@color/white</item>
-        <item name="android:statusBarColor">@color/bg_dark</item>
-        <item name="android:navigationBarColor">@color/bg_dark</item>
-        <item name="android:windowBackground">@color/bg_dark</item>
-        <item name="android:colorBackground">@color/bg_dark</item>
-        <item name="colorSurface">@color/surface</item>
-        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:statusBarColor">?attr/dkBgBase</item>
+        <item name="android:navigationBarColor">?attr/dkBgBase</item>
+        <item name="android:windowLightStatusBar">@bool/theme_light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/theme_light_system_bars</item>
+        <item name="android:windowBackground">?attr/dkBgBase</item>
+        <item name="android:colorBackground">?attr/dkBgBase</item>
+        <item name="colorSurface">?attr/dkSurface</item>
+        <item name="colorOnSurface">?attr/dkTextPrimary</item>
         <item name="materialButtonStyle">@style/Widget.OpenDiKey.Button</item>
         <item name="alertDialogTheme">@style/ThemeOverlay.OpenDiKey.AlertDialog</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.OpenDiKey.MaterialAlertDialog</item>
     </style>
 
+    <!-- Dashboard look: near-black solid background, flat bordered cards with small corners, blue accent. -->
+    <style name="Theme.OpenDiKey.Modern" parent="Theme.OpenDiKey">
+        <item name="dkBgBase">@color/modern_bg</item>
+        <item name="dkSurface">@color/modern_surface</item>
+        <item name="dkSurfaceStroke">@color/modern_stroke</item>
+        <item name="dkDividerSoft">@color/modern_divider</item>
+        <item name="dkTextPrimary">@color/modern_text</item>
+        <item name="dkTextMuted">@color/modern_muted</item>
+        <item name="dkAccent">@color/modern_accent</item>
+        <item name="dkAccentSoft">@color/modern_accent_soft</item>
+        <item name="dkHeading">@color/modern_text</item>
+        <item name="dkTileRadius">6dp</item>
+        <item name="dkCardRadius">6dp</item>
+        <item name="dkOutlineWidth">0dp</item>
+    </style>
+
     <style name="Widget.OpenDiKey.Button" parent="Widget.MaterialComponents.Button.OutlinedButton">
-        <item name="strokeColor">@color/accent_orange</item>
+        <item name="strokeColor">?attr/dkAccent</item>
         <item name="strokeWidth">1dp</item>
         <item name="backgroundTint">@color/open_dikey_button_bg</item>
         <item name="android:textColor">@color/open_dikey_button_text</item>
-        <item name="rippleColor">@color/accent_orange_soft</item>
+        <item name="rippleColor">?attr/dkAccentSoft</item>
     </style>
 
-    <!-- Match main outlined buttons; clear fill + orange stroke (no nested Material fill layers). -->
+    <!-- Match main outlined buttons; clear fill + accent stroke (no nested Material fill layers). -->
     <style name="Widget.OpenDiKey.DialogButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
-        <item name="strokeColor">@color/accent_orange</item>
+        <item name="strokeColor">?attr/dkAccent</item>
         <item name="strokeWidth">1dp</item>
-        <item name="backgroundTint">@color/surface</item>
-        <item name="android:textColor">@color/accent_orange</item>
-        <item name="rippleColor">@color/accent_orange_soft</item>
+        <item name="backgroundTint">?attr/dkSurface</item>
+        <item name="android:textColor">?attr/dkAccent</item>
+        <item name="rippleColor">?attr/dkAccentSoft</item>
         <item name="elevation">0dp</item>
         <item name="android:stateListAnimator">@null</item>
         <item name="android:minHeight">40dp</item>
@@ -66,9 +117,9 @@
     </style>
 
     <style name="ThemeOverlay.OpenDiKey.AlertDialog" parent="ThemeOverlay.AppCompat.Dialog.Alert">
-        <item name="android:background">@color/surface</item>
-        <item name="colorAccent">@color/accent_orange</item>
-        <item name="textColorAlertDialogListItem">@color/text_primary</item>
+        <item name="android:background">?attr/dkSurface</item>
+        <item name="colorAccent">?attr/dkAccent</item>
+        <item name="textColorAlertDialogListItem">?attr/dkTextPrimary</item>
         <item name="buttonBarStyle">@style/Widget.OpenDiKey.DialogButtonBar</item>
         <item name="buttonBarButtonStyle">@style/Widget.OpenDiKey.DialogButton</item>
         <item name="buttonBarPositiveButtonStyle">@style/Widget.OpenDiKey.DialogButton</item>
@@ -77,8 +128,8 @@
     </style>
 
     <style name="ThemeOverlay.OpenDiKey.MaterialAlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
-        <item name="colorSurface">@color/surface</item>
-        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorSurface">?attr/dkSurface</item>
+        <item name="colorOnSurface">?attr/dkTextPrimary</item>
         <item name="buttonBarStyle">@style/Widget.OpenDiKey.DialogButtonBar</item>
         <item name="materialButtonStyle">@style/Widget.OpenDiKey.DialogButton</item>
         <item name="buttonBarPositiveButtonStyle">@style/Widget.OpenDiKey.DialogButton</item>

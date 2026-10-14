@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attitude indicator: a tilted horizon inside a dial. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3,12 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 M4.5,14.5 L19.5,9.5 M12,6 V7.5 M11,12 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0"
+        android:strokeColor="@color/accent_orange"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

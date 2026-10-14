@@ -11,9 +11,11 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:drawableStart="@drawable/ic_card_tyres"
+        android:drawablePadding="8dp"
         android:text="@string/vehicle_info_block_tyres"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
-        android:textColor="@color/accent_orange"
+        android:textColor="@color/heading"
         android:textStyle="bold" />
 
     <LinearLayout

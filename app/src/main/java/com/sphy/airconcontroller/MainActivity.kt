@@ -1,7 +1,10 @@
 package com.sphy.airconcontroller
 
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -28,6 +31,8 @@ import kotlinx.coroutines.launch
 class MainActivity : OpenDiKeyActivity() {
     private lateinit var session: DiKeySession
     private lateinit var connStatus: android.widget.TextView
+    private lateinit var connDot: android.view.View
+    private var dotPulse: ObjectAnimator? = null
     private lateinit var adasIcon: android.widget.ImageView
 
     private val adasHoldHandler = Handler(Looper.getMainLooper())
@@ -43,6 +48,7 @@ class MainActivity : OpenDiKeyActivity() {
 
         session = OpenDiKeyApp.from(this).dikey
         connStatus = findViewById(R.id.mainConnStatus)
+        connDot = findViewById(R.id.mainConnDot)
         adasIcon = findViewById(R.id.homeAdasIcon)
         findViewById<android.widget.TextView>(R.id.homeVersionText).text = AppUpdater.currentVersionName(this)
 
@@ -94,14 +100,28 @@ class MainActivity : OpenDiKeyActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                session.status.collect { connStatus.text = it }
+                try {
+                    session.connectionState.collect { state ->
+                        connStatus.setText(
+                            when (state) {
+                                DiKeySession.ConnectionState.CONNECTED -> R.string.dikey_state_connected
+                                DiKeySession.ConnectionState.CONNECTING -> R.string.dikey_state_connecting
+                                DiKeySession.ConnectionState.DISCONNECTED -> R.string.dikey_state_disconnected
+                            },
+                        )
+                        showConnectionDot(state)
+                    }
+                } finally {
+                    // Don't leave the pulse running while the screen is stopped.
+                    stopDotPulse()
+                }
             }
         }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 AdasAutoApplyCoordinator.succeeded.collect { succeeded ->
-                    val color = if (succeeded) R.color.tyre_ok else R.color.accent_orange
+                    val color = if (succeeded) R.color.tyre_ok else R.color.status_warning
                     adasIcon.imageTintList =
                         android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this@MainActivity, color))
                 }
@@ -127,6 +147,32 @@ class MainActivity : OpenDiKeyActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleLaunchIntent(intent)
+    }
+
+    private fun showConnectionDot(state: DiKeySession.ConnectionState) {
+        val color = when (state) {
+            DiKeySession.ConnectionState.CONNECTED -> R.color.tyre_ok
+            DiKeySession.ConnectionState.CONNECTING -> R.color.status_warning
+            DiKeySession.ConnectionState.DISCONNECTED -> R.color.text_muted
+        }
+        connDot.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, color))
+        if (state == DiKeySession.ConnectionState.CONNECTING) startDotPulse() else stopDotPulse()
+    }
+
+    private fun startDotPulse() {
+        if (dotPulse?.isRunning == true) return
+        dotPulse = ObjectAnimator.ofFloat(connDot, android.view.View.ALPHA, 1f, DOT_PULSE_MIN_ALPHA).apply {
+            duration = DOT_PULSE_MS
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            start()
+        }
+    }
+
+    private fun stopDotPulse() {
+        dotPulse?.cancel()
+        dotPulse = null
+        connDot.alpha = 1f
     }
 
     override fun onDestroy() {
@@ -229,5 +275,7 @@ class MainActivity : OpenDiKeyActivity() {
     companion object {
         private const val BT_PERMISSION_REQUEST = 1001
         private const val ADAS_HOLD_MS = 5_000L
+        private const val DOT_PULSE_MS = 800L
+        private const val DOT_PULSE_MIN_ALPHA = 0.2f
     }
 }

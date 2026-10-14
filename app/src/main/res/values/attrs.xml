@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Palette attributes. Each theme (Theme.OpenDiKey = Classic, Theme.OpenDiKey.Modern) maps them to
+        its own colors, and the selectors in res/color/ expose them under the original color names so
+        layouts and icons did not need to change.
+    -->
+    <attr name="dkBgBase" format="color" />
+    <attr name="dkSurface" format="color" />
+    <attr name="dkSurfaceStroke" format="color" />
+    <attr name="dkDividerSoft" format="color" />
+    <attr name="dkTextPrimary" format="color" />
+    <attr name="dkTextMuted" format="color" />
+    <attr name="dkAccent" format="color" />
+    <attr name="dkAccentSoft" format="color" />
+    <!-- Card and section heading text. -->
+    <attr name="dkHeading" format="color" />
+
+    <!-- Corner radius of feature tiles (home, settings, debug) and of the smaller info cards. -->
+    <attr name="dkTileRadius" format="dimension" />
+    <attr name="dkCardRadius" format="dimension" />
+    <!-- Outline width of tiles and cards; 0 for no border. -->
+    <attr name="dkOutlineWidth" format="dimension" />
+</resources>

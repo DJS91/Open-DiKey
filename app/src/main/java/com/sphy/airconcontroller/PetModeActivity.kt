@@ -320,6 +320,7 @@ class PetModeActivity : OpenDiKeyActivity() {
         exiting = true
         statusText.setText(R.string.pet_mode_restoring)
         findViewById<ImageButton>(R.id.petBackButton).isEnabled = false
+        findViewById<View>(R.id.backButtonEnd)?.isEnabled = false
         lifecycleScope.launch {
             brightnessJob?.join()
             while (profileApplyInProgress) {

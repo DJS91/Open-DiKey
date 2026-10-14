@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wheel with tyre, rim and spokes. Distinct from ic_tyre, which is the filled status icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3,12 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 M6.5,12 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0 M12,6.5 V10 M12,14 V17.5 M6.5,12 H10 M14,12 H17.5"
+        android:strokeColor="@color/accent_orange"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

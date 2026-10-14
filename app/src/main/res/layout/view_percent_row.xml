@@ -32,7 +32,7 @@
             tools:text="91%" />
     </LinearLayout>
 
-    <com.sphy.airconcontroller.ui.GradientPercentBar
+    <com.sphy.airconcontroller.ui.PercentBar
         android:id="@+id/percentRowBar"
         android:layout_width="match_parent"
         android:layout_height="10dp"

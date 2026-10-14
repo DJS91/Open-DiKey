@@ -7,14 +7,31 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="bg_dark">#FF101214</color>
-    <color name="surface">#FF1A1E24</color>
-    <color name="surface_stroke">#FF2A3038</color>
-    <color name="divider_soft">#33F4F6F8</color>
-    <color name="text_primary">#FFF4F6F8</color>
-    <color name="text_muted">#FF9AA3AE</color>
-    <color name="accent_orange">#FFFF5A1F</color>
-    <color name="accent_orange_soft">#33FF5A1F</color>
+    <!--
+        Palettes. Screens never use these directly: res/color/bg_base, surface, text_primary, accent_orange ...
+        are theme-driven selectors (see attrs.xml) that resolve to the Classic or Modern set below for
+        whichever style is active. values/ holds the dark variants; values-notnight/ the light ones.
+    -->
+    <color name="classic_bg">#FF101214</color>
+    <color name="classic_surface">#FF1A1E24</color>
+    <color name="classic_stroke">#FF2A3038</color>
+    <color name="classic_divider">#33F4F6F8</color>
+    <color name="classic_text">#FFF4F6F8</color>
+    <color name="classic_muted">#FF9AA3AE</color>
+    <color name="classic_accent">#FFFF5A1F</color>
+    <color name="classic_accent_soft">#33FF5A1F</color>
+
+    <color name="modern_bg">#FF09090B</color>
+    <color name="modern_surface">#FF17171C</color>
+    <color name="modern_stroke">#FF26262C</color>
+    <color name="modern_divider">#33FAFAFA</color>
+    <color name="modern_text">#FFFAFAFA</color>
+    <color name="modern_muted">#FF8E8E99</color>
+    <color name="modern_accent">#FFFF5A1F</color>
+    <color name="modern_accent_soft">#33FF5A1F</color>
+
+    <!-- Fixed warning orange for status indicators, independent of the theme accent. -->
+    <color name="status_warning">#FFFF5A1F</color>
     <color name="tyre_ok">#FF3DDC84</color>
     <color name="accent_green_soft">#333DDC84</color>
     <color name="tyre_under">#FFFF5A1F</color>
@@ -22,7 +39,7 @@
     <color name="horizon_sky">#FF2A6FBF</color>
     <color name="horizon_ground">#FF6B4E2E</color>
     <color name="horizon_line">#FFF4F6F8</color>
-    <color name="percent_bar_start">#FFFF5A1F</color>
-    <color name="percent_bar_mid">#FFFFB020</color>
-    <color name="percent_bar_end">#FF3DDC84</color>
+    <color name="gauge_charge">#FF3D8BFF</color>
+    <color name="gauge_fuel">#FF3DDC84</color>
+    <color name="gauge_caution">#FFF5B400</color>
 </resources>

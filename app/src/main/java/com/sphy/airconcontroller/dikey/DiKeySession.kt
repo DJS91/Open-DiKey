@@ -23,12 +23,15 @@ import com.sphy.airconcontroller.storage.LedRestoreSnapshot
 import com.sphy.airconcontroller.usb.DiKeyUsbBridge
 import com.sphy.airconcontroller.usb.UsbHostSerial
 import com.sphy.airconcontroller.usb.UsbPermissionReceiver
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /**
  * Process-wide DiKey connection: USB C6 bridge first, BLE fallback.
@@ -344,6 +347,23 @@ class DiKeySession(private val app: Context) {
 
     val isConnected: Boolean get() = controller.isConnected
     val isUsbOpen: Boolean get() = usbBridge.isUsbOpen
+
+    enum class ConnectionState { CONNECTED, CONNECTING, DISCONNECTED }
+
+    /**
+     * Coarse connection state for screens that only need "is the DiKey up?" and not the detailed
+     * status text. Re-evaluated on every [status] message: each place that changes the connect flags
+     * also posts a status, so this can't go stale.
+     */
+    val connectionState: Flow<ConnectionState> = status
+        .map {
+            when {
+                controller.isConnected -> ConnectionState.CONNECTED
+                autoConnectInFlight || usingUsbBridge || usbBridge.isUsbOpen -> ConnectionState.CONNECTING
+                else -> ConnectionState.DISCONNECTED
+            }
+        }
+        .distinctUntilChanged()
 
     private fun openUsbBridge(device: UsbDevice): Boolean {
         bleScanner.stop()

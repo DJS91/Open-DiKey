@@ -122,7 +122,7 @@ jobs:
             1. Flash `dikey-usb-bridge-c3.bin` onto an ESP32-C3 Super Mini
             2. Install `open-dikey.apk` on the DiLink 5 head unit
 
-            See the [README](https://github.com/sp-hy/Open-DiKey#installation) for details.
+            See the [README](https://github.com/DJS91/Open-DiKey#installation) for details.
 
             **Version:** `${{ steps.version.outputs.name }}` (code `${{ steps.version.outputs.code }}`)
           files: |

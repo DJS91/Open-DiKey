@@ -6,6 +6,7 @@ import com.sphy.airconcontroller.adb.AdbKeepAlive
 import com.sphy.airconcontroller.boot.BootAppLauncher
 import com.sphy.airconcontroller.boot.DiKeyListenService
 import com.sphy.airconcontroller.dikey.DiKeySession
+import com.sphy.airconcontroller.ui.ThemeManager
 
 class OpenDiKeyApp : Application() {
     lateinit var dikey: DiKeySession
@@ -13,6 +14,7 @@ class OpenDiKeyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ThemeManager.applySaved(this)
         BootAppLauncher.trackActivities(this)
         AdbKeepAlive.start(this)
         dikey = DiKeySession(this)

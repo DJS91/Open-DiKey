@@ -14,7 +14,7 @@
         android:orientation="horizontal"
         android:paddingStart="8dp"
         android:paddingTop="8dp"
-        android:paddingEnd="20dp"
+        android:paddingEnd="8dp"
         android:paddingBottom="8dp">
 
         <ImageButton
@@ -35,6 +35,8 @@
             android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
             android:textColor="@color/text_primary"
             android:textStyle="bold" />
+
+        <include layout="@layout/view_back_button_end" />
     </LinearLayout>
 
     <LinearLayout

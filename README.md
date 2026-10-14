@@ -34,7 +34,7 @@ Other vehicles are untested.
 
 **1. Flash the USB bridge**
 
-On a PC in Chrome or Edge, download `dikey-usb-bridge-c3.bin` from the [latest release](https://github.com/sp-hy/Open-DiKey/releases), then open **[ESPWebTool](https://esptool.spacehuhn.com/)**:
+On a PC in Chrome or Edge, download `dikey-usb-bridge-c3.bin` from the [latest release](https://github.com/DJS91/Open-DiKey/releases), then open **[ESPWebTool](https://esptool.spacehuhn.com/)**:
 
 1. Connect — choose **USB JTAG/serial debug unit**. If it doesn't show up, hold **BOOT** while plugging it in.
 2. Delete every existing address slot (there will be about 4)
@@ -49,7 +49,7 @@ Then click Program.
 
 **2. Install the app**
 
-Sideload the APK from the [latest release](https://github.com/sp-hy/Open-DiKey/releases) onto the head unit and launch it **once**.
+Sideload the APK from the [latest release](https://github.com/DJS91/Open-DiKey/releases) onto the head unit and launch it **once**.
 
 **3. Grant permissions**
 
@@ -82,7 +82,7 @@ Open DiKey once after each cold boot or deep sleep. A foreground listener then k
 
 **Background listener** — After you open Open DiKey, a foreground service keeps the USB/BLE DiKey link alive while the UI is in the background. Open the app once after power-on (see [autostart.md](autostart.md) for DiLink limitations).
 
-**In-app updates** — Home gear icon → **Check for updates** downloads the latest `open-dikey.apk` from [GitHub Releases](https://github.com/sp-hy/Open-DiKey/releases).
+**In-app updates** — Home gear icon → **Check for updates** downloads the latest `open-dikey.apk` from [GitHub Releases](https://github.com/DJS91/Open-DiKey/releases).
 
 ---
 

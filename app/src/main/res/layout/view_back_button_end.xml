@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Second back button for the right-hand end of a screen's top bar, so it is easy to reach from the
+    driver's seat in a right-hand-drive car. Include it as the LAST child of the top bar; the click is
+    wired in OpenDiKeyActivity to the normal back action.
+-->
+<ImageButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/backButtonEnd"
+    android:layout_width="48dp"
+    android:layout_height="48dp"
+    android:layout_marginStart="4dp"
+    android:background="?attr/selectableItemBackgroundBorderless"
+    android:contentDescription="@string/navigate_back"
+    android:padding="12dp"
+    android:src="@drawable/ic_arrow_back"
+    android:tint="@color/text_primary" />

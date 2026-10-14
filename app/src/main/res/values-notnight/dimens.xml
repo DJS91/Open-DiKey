@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The photo is dark, so keep it much fainter on the light background. -->
+    <item name="bg_photo_alpha" format="float" type="dimen">0.08</item>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Light palette. Only the colors that differ from the dark palette in values/colors.xml are
+    overridden here; the accent orange and the white-on-accent text are shared by both.
+-->
+<resources>
+    <color name="classic_bg">#FFEEF1F5</color>
+    <color name="classic_surface">#FFFFFFFF</color>
+    <color name="classic_stroke">#FFD3D9E0</color>
+    <color name="classic_divider">#33101214</color>
+    <color name="classic_text">#FF14181D</color>
+    <color name="classic_muted">#FF5A6572</color>
+
+    <color name="modern_bg">#FFF4F5F7</color>
+    <color name="modern_surface">#FFFFFFFF</color>
+    <color name="modern_stroke">#FFE3E5EA</color>
+    <color name="modern_divider">#33101214</color>
+    <color name="modern_text">#FF0F1115</color>
+    <color name="modern_muted">#FF6B7280</color>
+    <color name="modern_accent">#FFFF5A1F</color>
+    <color name="modern_accent_soft">#33FF5A1F</color>
+    <!-- Deeper green: the dark-mode green is too pale to read on a white surface. -->
+    <color name="tyre_ok">#FF1E9E5A</color>
+    <color name="accent_green_soft">#331E9E5A</color>
+    <color name="gauge_charge">#FF1F6FD6</color>
+    <color name="gauge_fuel">#FF1E9E5A</color>
+    <color name="gauge_caution">#FFE0A000</color>
+</resources>

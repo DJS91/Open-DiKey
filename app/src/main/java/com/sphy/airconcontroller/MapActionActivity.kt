@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.ListView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import com.sphy.airconcontroller.dikey.ButtonMapSlot
 import com.sphy.airconcontroller.dikey.DiKeyButtonCatalog
@@ -85,15 +86,22 @@ class MapActionActivity : OpenDiKeyActivity() {
             return
         }
 
+        // Back out of the seat sub-menu first, for the system back and both on-screen back buttons.
+        onBackPressedDispatcher.addCallback(this, seatMenuBack)
         findViewById<android.widget.ImageButton>(R.id.mapEventBackButton).setOnClickListener {
-            if (showingSeatMenu) showMainOptions(animate = true) else finish()
+            onBackPressedDispatcher.onBackPressed()
         }
 
         showMainOptions()
     }
 
+    private val seatMenuBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = showMainOptions(animate = true)
+    }
+
     private fun showMainOptions(animate: Boolean = false) {
         showingSeatMenu = false
+        seatMenuBack.isEnabled = false
         findViewById<TextView>(R.id.mapEventTitle).setText(R.string.map_action_title)
         findViewById<TextView>(R.id.mapEventSubtitle).text = subtitle()
         val options = buildList {
@@ -140,6 +148,7 @@ class MapActionActivity : OpenDiKeyActivity() {
 
     private fun showSeatOptions() {
         showingSeatMenu = true
+        seatMenuBack.isEnabled = true
         findViewById<TextView>(R.id.mapEventTitle).setText(R.string.map_event_seat)
         findViewById<TextView>(R.id.mapEventSubtitle).text = getString(R.string.map_event_seat_pick_hint)
         showOptions(

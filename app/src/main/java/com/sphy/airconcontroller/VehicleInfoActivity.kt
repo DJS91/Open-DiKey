@@ -10,6 +10,8 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.ColorRes
+import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,7 +22,7 @@ import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.TabletSocReader
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
-import com.sphy.airconcontroller.ui.GradientPercentBar
+import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -153,33 +155,53 @@ class VehicleInfoActivity : OpenDiKeyActivity() {
 
         // —— Battery column ——
         val batteryBlock = inflater.inflate(R.layout.view_info_block, colBattery, false)
-        batteryBlock.findViewById<TextView>(R.id.infoBlockTitle)
-            .text = getString(R.string.vehicle_info_block_battery)
+        batteryBlock.findViewById<TextView>(R.id.infoBlockTitle).apply {
+            text = getString(R.string.vehicle_info_block_battery)
+            setTitleIcon(R.drawable.ic_card_battery)
+        }
         batteryBlock.findViewById<TextView>(R.id.infoBlockHero).visibility = View.GONE
         batterySubtitle = batteryBlock.findViewById(R.id.infoBlockSubtitle)
         batteryMetaHost = batteryBlock.findViewById(R.id.infoBlockRows)
-        socBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_soc))
-        sohBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_soh))
-        fuelBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_fuel))
+        socBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_soc), R.color.gauge_charge)
+        sohBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_soh), R.color.gauge_charge)
+        fuelBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_fuel), R.color.gauge_fuel)
         colBattery.addView(batteryBlock)
 
-        consumptionHost = addSimpleBlock(colBattery, getString(R.string.vehicle_info_block_consumption))
-        tabletMetaHost = addSimpleBlock(colBattery, getString(R.string.vehicle_info_block_tablet))
+        consumptionHost = addSimpleBlock(
+            colBattery,
+            getString(R.string.vehicle_info_block_consumption),
+            R.drawable.ic_card_consumption,
+        )
+        tabletMetaHost = addSimpleBlock(
+            colBattery,
+            getString(R.string.vehicle_info_block_tablet),
+            R.drawable.ic_card_head_unit,
+        )
         stretchColumnBlocks(colBattery)
 
         // —— Dynamics column ——
         val driveBlock = inflater.inflate(R.layout.view_info_block, colDynamics, false)
-        driveBlock.findViewById<TextView>(R.id.infoBlockTitle)
-            .text = getString(R.string.vehicle_info_block_drive)
+        driveBlock.findViewById<TextView>(R.id.infoBlockTitle).apply {
+            text = getString(R.string.vehicle_info_block_drive)
+            setTitleIcon(R.drawable.ic_card_drive)
+        }
         driveHero = driveBlock.findViewById(R.id.infoBlockHero)
         driveSubtitle = driveBlock.findViewById(R.id.infoBlockSubtitle)
         driveMetaHost = driveBlock.findViewById(R.id.infoBlockRows)
-        accelBar = addPercentRow(driveMetaHost, getString(R.string.vehicle_info_row_accel))
-        brakeBar = addPercentRow(driveMetaHost, getString(R.string.vehicle_info_row_brake))
+        accelBar = addPercentRow(driveMetaHost, getString(R.string.vehicle_info_row_accel), R.color.gauge_caution)
+        brakeBar = addPercentRow(driveMetaHost, getString(R.string.vehicle_info_row_brake), R.color.gauge_caution)
         colDynamics.addView(driveBlock)
 
-        mileageHost = addSimpleBlock(colDynamics, getString(R.string.vehicle_info_block_mileage))
-        engineHost = addSimpleBlock(colDynamics, getString(R.string.vehicle_info_block_engine))
+        mileageHost = addSimpleBlock(
+            colDynamics,
+            getString(R.string.vehicle_info_block_mileage),
+            R.drawable.ic_card_mileage,
+        )
+        engineHost = addSimpleBlock(
+            colDynamics,
+            getString(R.string.vehicle_info_block_engine),
+            R.drawable.ic_card_engine,
+        )
         stretchColumnBlocks(colDynamics)
 
         // —— Tyres / attitude column ——
@@ -229,7 +251,11 @@ class VehicleInfoActivity : OpenDiKeyActivity() {
         }
         colTyres.addView(attitudeBlock)
 
-        chassisHost = addSimpleBlock(colTyres, getString(R.string.vehicle_info_block_chassis))
+        chassisHost = addSimpleBlock(
+            colTyres,
+            getString(R.string.vehicle_info_block_chassis),
+            R.drawable.ic_card_chassis,
+        )
         stretchColumnBlocks(colTyres)
 
         dashboardReady = true
@@ -266,22 +292,33 @@ class VehicleInfoActivity : OpenDiKeyActivity() {
         }
     }
 
-    private fun addSimpleBlock(parent: LinearLayout, title: String): LinearLayout {
+    /** Puts an icon before a card heading. The icons are bundled vectors, so no network is needed. */
+    private fun TextView.setTitleIcon(@DrawableRes icon: Int) {
+        setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0)
+        compoundDrawablePadding = (8 * resources.displayMetrics.density).toInt()
+    }
+
+    private fun addSimpleBlock(parent: LinearLayout, title: String, @DrawableRes icon: Int): LinearLayout {
         val block = LayoutInflater.from(this).inflate(R.layout.view_info_block, parent, false)
-        block.findViewById<TextView>(R.id.infoBlockTitle).text = title
+        block.findViewById<TextView>(R.id.infoBlockTitle).apply {
+            text = title
+            setTitleIcon(icon)
+        }
         block.findViewById<TextView>(R.id.infoBlockHero).visibility = View.GONE
         block.findViewById<TextView>(R.id.infoBlockSubtitle).visibility = View.GONE
         parent.addView(block)
         return block.findViewById(R.id.infoBlockRows)
     }
 
-    private fun addPercentRow(host: LinearLayout, label: String): PercentRow {
+    private fun addPercentRow(host: LinearLayout, label: String, @ColorRes fillColor: Int): PercentRow {
         val row = LayoutInflater.from(this).inflate(R.layout.view_percent_row, host, false)
         row.findViewById<TextView>(R.id.percentRowLabel).text = label
         host.addView(row)
         return PercentRow(
             value = row.findViewById(R.id.percentRowValue),
-            bar = row.findViewById(R.id.percentRowBar),
+            bar = row.findViewById<PercentBar>(R.id.percentRowBar).apply {
+                setFillColor(ContextCompat.getColor(this@VehicleInfoActivity, fillColor))
+            },
         )
     }
 
@@ -517,7 +554,7 @@ class VehicleInfoActivity : OpenDiKeyActivity() {
 
     private data class PercentRow(
         val value: TextView,
-        val bar: GradientPercentBar,
+        val bar: PercentBar,
     ) {
         fun set(pct: Double?) {
             value.text = if (pct == null) "—" else String.format("%.0f%%", pct)

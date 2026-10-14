@@ -16,7 +16,7 @@ import java.net.URL
 
 /** Checks GitHub Releases and downloads/installs `open-dikey.apk`. */
 object AppUpdater {
-    const val REPO = "sp-hy/Open-DiKey"
+    const val REPO = "DJS91/Open-DiKey"
     const val APK_ASSET = "open-dikey.apk"
     private const val USER_AGENT = "OpenDiKey-Updater"
 

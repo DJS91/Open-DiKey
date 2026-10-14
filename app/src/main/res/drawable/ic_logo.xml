@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Open DiKey logo mark, from open-dikey_logo_icon.svg. Filled with the accent so it reads on dark and light. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:scaleX="1.66253662109375"
+        android:scaleY="1.66253662109375"
+        android:translateX="-168"
+        android:translateY="-101.6">
+        <path
+            android:fillColor="@color/accent_orange"
+            android:pathData="M 362.2 328.15 Q 406 284.4 406 222.45 406 160.5 362.2 116.7 318.45 72.95 256.5 72.95 194.55 72.95 150.75 116.7 107 160.5 107 222.45 107 284.4 150.75 328.15 167.85 345.25 187.75 355.7 L 224.95 277.05 Q 218.05 272.95 212 266.9 193.6 248.5 193.6 222.45 193.6 196.4 212 178 230.4 159.6 256.45 159.6 282.5 159.6 300.9 178 319.3 196.4 319.3 222.45 319.3 248.5 300.9 266.9 292.8 275 283.2 279.55 L 321.4 357.65 Q 343.45 346.9 362.2 328.15 Z" />
+    </group>
+</vector>

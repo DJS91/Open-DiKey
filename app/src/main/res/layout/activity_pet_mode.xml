@@ -14,7 +14,7 @@
         android:orientation="horizontal"
         android:paddingStart="8dp"
         android:paddingTop="8dp"
-        android:paddingEnd="12dp"
+        android:paddingEnd="8dp"
         android:paddingBottom="8dp">
 
         <ImageButton
@@ -45,6 +45,8 @@
             android:padding="12dp"
             android:src="@drawable/ic_settings"
             android:tint="@color/text_primary" />
+
+        <include layout="@layout/view_back_button_end" />
     </LinearLayout>
 
     <LinearLayout

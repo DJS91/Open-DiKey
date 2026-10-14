@@ -16,6 +16,22 @@ enum class AdasEditMode {
     CUSTOM,
 }
 
+/** App color scheme chosen in Settings. [SYSTEM] defers to the head unit's current day/night mode. */
+enum class ThemeMode {
+    DARK,
+    LIGHT,
+    SYSTEM,
+}
+
+/** Visual style chosen in Settings, independent of [ThemeMode]. */
+enum class ThemeStyle {
+    /** The original look: cabin photo background, rounded tiles, orange accent. */
+    CLASSIC,
+
+    /** Dashboard look: solid background, flat bordered cards with small corners, blue accent. */
+    MODERN,
+}
+
 /**
  * Saved Custom ADAS profile (staged until Apply).
  * [laneDeparture] is [BydAdasController.LaneDepartureMode] name: OFF / WARNING / PREVENT / BOTH.
@@ -359,6 +375,22 @@ class AppSettings(context: Context) {
             prefs.edit().putBoolean(KEY_OPEN_APP_ON_BOOT, value).apply()
         }
 
+    /** Dark until the user picks otherwise, which is how the app looked before themes existed. */
+    var themeMode: ThemeMode
+        get() = ThemeMode.entries.firstOrNull { it.name == prefs.getString(KEY_THEME_MODE, null) }
+            ?: ThemeMode.DARK
+        set(value) {
+            prefs.edit().putString(KEY_THEME_MODE, value.name).apply()
+        }
+
+    /** Classic until the user picks otherwise, so existing installs look the same after updating. */
+    var themeStyle: ThemeStyle
+        get() = ThemeStyle.entries.firstOrNull { it.name == prefs.getString(KEY_THEME_STYLE, null) }
+            ?: ThemeStyle.CLASSIC
+        set(value) {
+            prefs.edit().putString(KEY_THEME_STYLE, value.name).apply()
+        }
+
     fun petModeProfile(): PetModeProfile = PetModeProfile(
         fanLevel = prefs.getInt(KEY_PET_FAN_LEVEL, 3).coerceIn(1, 7),
         temperatureC = prefs.getInt(KEY_PET_TEMPERATURE, 21).coerceIn(17, 32),
@@ -541,6 +573,8 @@ class AppSettings(context: Context) {
         private const val KEY_ADAS_CUSTOM_DMS = "adas_custom_dms"
         private const val KEY_ADAS_APPLY_ON_BOOT = "adas_apply_on_boot"
         private const val KEY_OPEN_APP_ON_BOOT = "open_app_on_boot"
+        private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_THEME_STYLE = "theme_style"
         private const val KEY_PET_FAN_LEVEL = "pet_fan_level"
         private const val KEY_PET_TEMPERATURE = "pet_temperature"
         private const val KEY_PET_RECIRCULATING = "pet_recirculating"
