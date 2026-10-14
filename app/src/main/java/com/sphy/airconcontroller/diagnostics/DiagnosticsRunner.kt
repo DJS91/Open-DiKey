@@ -984,8 +984,12 @@ class DiagnosticsRunner(
         )
     }
 
-    /** What the home screen's CarPlay / Android Auto shortcut sees. Run once connected and once not. */
-    private fun projection() {
+    /**
+     * What the home screen's CarPlay / Android Auto shortcut sees, plus everything we might use to tell
+     * when a phone is actually connected (processes, services, notifications, Wi-Fi, Bluetooth, log).
+     * Run it once with the phone connected and once without, then compare the two reports.
+     */
+    private suspend fun projection() {
         val found = ProjectionApps.find(app)
         kv("Home shortcut would show", found?.let { "${it.label} (${it.packageName})" } ?: "no — nothing listed")
         ProjectionApps.report(app).forEach { line("  $it") }
@@ -994,6 +998,22 @@ class DiagnosticsRunner(
             "Phone projection apps",
             found?.let { "listed: ${it.label}" } ?: "none listed (phone not connected?)",
         )
+
+        line()
+        line("Connection signals (compare connected vs not connected):")
+        val results = AdbPermissionManager.runShellBatch(
+            app,
+            PROJECTION_COMMANDS,
+            perCommandTimeoutMs = PROJECTION_TIMEOUT_MS,
+        )
+        if (results.isEmpty()) {
+            line("ADB not available — skipped")
+            return
+        }
+        PROJECTION_COMMANDS.zip(results).forEach { (cmd, result) ->
+            line("$ $cmd")
+            line(result.output.ifBlank { "(no output)" }.prependIndent("  "))
+        }
     }
 
     private fun background() {
@@ -1262,6 +1282,27 @@ class DiagnosticsRunner(
             "dumpsys package com.byd.airconditioning | grep -iE 'userId|sharedUser|permission|Service' | head -n 80",
             "dumpsys package com.byd.acservice | grep -iE -A3 'Service Resolver|singleUser|exported|BIND_' | head -n 40",
             "dumpsys activity services com.byd.acservice | head -n 60",
+        )
+
+        private const val PROJECTION_TIMEOUT_MS = 8_000L
+
+        /** Read-only probes for "is a phone connected over CarPlay / Android Auto?"; output is capped per command. */
+        private val PROJECTION_COMMANDS = listOf(
+            "pidof com.ts.carplay com.ts.carplay.app com.ts.androidauto.app com.ts.androidauto.projectionservice com.ts.dm.service com.ts.car.dcm.dccontroller",
+            "ps -A | grep -iE 'carplay|androidauto|projection|ts\\.dm|dccontroller|hostapd|wpa_supplicant|p2p' | head -n 40",
+            "dumpsys activity services com.ts.carplay | head -n 40",
+            "dumpsys activity services com.ts.androidauto.projectionservice | head -n 40",
+            "dumpsys activity services com.ts.dm.service | head -n 40",
+            "dumpsys activity services com.ts.car.dcm.dccontroller | head -n 40",
+            "dumpsys notification --noredact | grep -iE -B2 -A8 'pkg=com\\.ts\\.(carplay|androidauto|dm|car)' | head -n 80",
+            "ip -o addr | head -n 40",
+            "ip neigh | head -n 20",
+            "cat /proc/net/arp",
+            "dumpsys wifi | grep -iE 'softap|p2p|wifi is|connected|clients|ssid|state' | head -n 50",
+            "dumpsys bluetooth_manager | grep -iE 'connected|state:|profile|bonded|name' | head -n 50",
+            "dumpsys activity activities | grep -iE 'mResumedActivity|mFocusedActivity|carplay|androidauto' | head -n 20",
+            "dumpsys media_session | grep -iE 'package=|state=|active|carplay|androidauto' | head -n 30",
+            "logcat -d -t 1500 | grep -iE 'carplay|androidauto|projection|iap2' | tail -n 60",
         )
     }
 }
