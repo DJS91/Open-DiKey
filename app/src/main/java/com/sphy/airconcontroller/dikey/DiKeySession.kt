@@ -365,6 +365,26 @@ class DiKeySession(private val app: Context) {
         }
         .distinctUntilChanged()
 
+    /**
+     * Dial tools for the DiKey probe page. Pausing stops the dials from changing the car's climate and
+     * from being repainted from it, so a dial can be put in any mode just to see whether it reports turns.
+     */
+    fun setDialTestMode(enabled: Boolean) = climateMapper.setPaused(enabled)
+
+    val isDialTestMode: Boolean get() = climateMapper.paused
+
+    /** Puts one dial's LCD in [type] mode with its default value. */
+    fun testDialMode(left: Boolean, type: DialDisplayType): Boolean =
+        controller.sendDialDisplay(left, type.code, type.defaultValue)
+
+    /** Applies new allow-lists and re-sends the whole dial setup (0x06/0x07, then the dial values). */
+    fun resendDialSetup(lists: DiKeyController.AllowLists): Boolean {
+        controller.setAllowLists(lists)
+        return controller.configureDialInfrastructure(restoreDialsAfter = true)
+    }
+
+    val dialAllowLists: DiKeyController.AllowLists get() = controller.allowLists
+
     private fun openUsbBridge(device: UsbDevice): Boolean {
         bleScanner.stop()
         usingUsbBridge = true
@@ -417,6 +437,8 @@ class DiKeySession(private val app: Context) {
 
     private fun persistDialFromEvent(event: DiKeyEvent) {
         if (event !is DiKeyEvent.Encoder) return
+        // Dial-tool experiments put the dials in unusual modes; never remember those.
+        if (climateMapper.paused) return
         if (climateMapper.isShowingOff(event.side == "LEFT")) return
         val type = DialDisplayType.fromCode(event.displayType) ?: return
         settings.saveDial(event.side == "LEFT", type, event.value)

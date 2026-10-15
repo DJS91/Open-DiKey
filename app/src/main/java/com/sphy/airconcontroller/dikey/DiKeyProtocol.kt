@@ -67,12 +67,17 @@ object DiKeyProtocol {
     /**
      * CMD 0x06 (right) / 0x07 (left) — which displayTypes the dial may enter.
      * Payload slots are types 2…16 (vendor `y6.eb.g`).
+     *
+     * [allowNone] also allows the blank "None" type by putting `1` in the first payload byte, as the
+     * vendor notes describe. That byte is also the slot for type 2, so None is only added when type 2
+     * isn't already allowed.
      */
-    fun buildEncoderModeConfig(left: Boolean, allowedTypes: Set<Int>): ByteArray {
+    fun buildEncoderModeConfig(left: Boolean, allowedTypes: Set<Int>, allowNone: Boolean = false): ByteArray {
         val payload = ByteArray(15)
         for (type in 2..16) {
             payload[type - 2] = if (type in allowedTypes) type.toByte() else 0
         }
+        if (allowNone && payload[0].toInt() == 0) payload[0] = 1
         return buildFrame(
             if (left) CMD_ENCODER_MODE_LEFT else CMD_ENCODER_MODE_RIGHT,
             payload

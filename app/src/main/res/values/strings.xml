@@ -163,6 +163,26 @@
   <string name="dikey_input_section">Button / dial events</string>
   <string name="dikey_event_log_empty">Events will appear here after connect.</string>
   <string name="dikey_clear_log">Clear event log</string>
+  <string name="dial_tools_title">Dial tools</string>
+  <string name="dial_tools_hint">For finding out why a dial doesn\'t report turns. Turn a dial and watch the counters. Changes here are temporary and reset when the app restarts.</string>
+  <string name="dial_tools_pause">Pause climate control while testing</string>
+  <string name="dial_tools_left_lcd">Left dial display</string>
+  <string name="dial_tools_right_lcd">Right dial display</string>
+  <string name="dial_tools_left_allow">Left dial allowed modes (sent with the setup)</string>
+  <string name="dial_tools_right_allow">Right dial allowed modes (sent with the setup)</string>
+  <string name="dial_mode_passenger_temp">Pass. temp</string>
+  <string name="dial_mode_passenger_fan">Pass. fan</string>
+  <string name="dial_mode_driver_temp">Driver temp</string>
+  <string name="dial_mode_driver_fan">Driver fan</string>
+  <string name="dial_mode_media">Media vol</string>
+  <string name="dial_allow_default">Default</string>
+  <string name="dial_allow_none">Default + None</string>
+  <string name="dial_allow_wide">All 4 temp/fan</string>
+  <string name="dial_resend_setup">Re-send dial setup</string>
+  <string name="dial_reset_counters">Reset counters</string>
+  <string name="dial_tools_counters_fmt">Left:  %1$d turns, %2$d clicks, %3$d long\nRight: %4$d turns, %5$d clicks, %6$d long\nOther frames: %7$d</string>
+  <string name="dial_tools_not_connected">Not connected to the DiKey</string>
+  <string name="dial_tools_sent">Sent</string>
   <string name="settings_title">BYD local climate</string>
   <string name="error_unknown">unknown error</string>
 

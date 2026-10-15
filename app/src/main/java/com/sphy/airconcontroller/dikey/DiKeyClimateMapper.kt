@@ -50,8 +50,29 @@ class DiKeyClimateMapper(
     fun handle(event: DiKeyEvent) {
         when (event) {
             is DiKeyEvent.Button -> handleButton(event)
-            is DiKeyEvent.Encoder -> handleEncoder(event)
+            is DiKeyEvent.Encoder -> if (!paused) handleEncoder(event)
             is DiKeyEvent.Raw -> Unit
+        }
+    }
+
+    /**
+     * While paused the dials neither change the car nor get repainted from it. Used by the DiKey probe's
+     * dial tools so testing dial modes can't alter the climate.
+     */
+    @Volatile
+    var paused = false
+        private set
+
+    fun setPaused(value: Boolean) {
+        if (paused == value) return
+        paused = value
+        if (!value) {
+            // Forget what we think is on the LCDs so the next poll repaints them from the car.
+            shownLeft = null
+            shownRight = null
+            wakingLeft = false
+            wakingRight = false
+            if (polling) pollCar()
         }
     }
 
@@ -254,7 +275,7 @@ class DiKeyClimateMapper(
     }
 
     private fun pollCar() {
-        if (!dikey.isConnected || pollInFlight) return
+        if (paused || !dikey.isConnected || pollInFlight) return
         pollInFlight = true
         io.execute {
             val state = readState()

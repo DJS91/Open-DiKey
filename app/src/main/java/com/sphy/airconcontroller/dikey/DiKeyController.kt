@@ -32,6 +32,22 @@ class DiKeyController(
 
     val isConnected: Boolean get() = ready
 
+    /** Which dial modes each dial is told it may enter (CMD 0x06/0x07). Defaults match the original setup. */
+    data class AllowLists(
+        val left: Set<Int> = DialDisplayType.leftCycleTypes,
+        val right: Set<Int> = DialDisplayType.rightCycleTypes,
+        val leftAllowNone: Boolean = false,
+    )
+
+    @Volatile
+    var allowLists = AllowLists()
+        private set
+
+    /** Used by the DiKey probe's dial tools. Takes effect the next time the setup is sent. */
+    fun setAllowLists(lists: AllowLists) {
+        allowLists = lists
+    }
+
     fun postStatus(msg: String) = onStatus(msg)
 
     fun attachSink(next: DiKeyFrameSink?) {
@@ -295,20 +311,22 @@ class DiKeyController(
             )
         }
         if (!modesConfigured) {
+            val lists = allowLists
             writeQueue.addLast(
                 OutboundWrite(
                     bytes = DiKeyProtocol.buildEncoderModeConfig(
                         left = false,
-                        DialDisplayType.rightCycleTypes
+                        lists.right
                     ),
-                    logLabel = "mode RIGHT 0x06 types=${DialDisplayType.rightCycleTypes}"
+                    logLabel = "mode RIGHT 0x06 types=${lists.right}"
                 )
             )
             writeQueue.addLast(
                 OutboundWrite(
                     bytes = DiKeyProtocol.buildEncoderModeConfig(
                         left = true,
-                        DialDisplayType.leftCycleTypes
+                        lists.left,
+                        allowNone = lists.leftAllowNone
                     ),
                     onSuccess = {
                         modesConfigured = true
@@ -319,7 +337,7 @@ class DiKeyController(
                         }
                         onDialsReady()
                     },
-                    logLabel = "mode LEFT 0x07 types=${DialDisplayType.leftCycleTypes}"
+                    logLabel = "mode LEFT 0x07 types=${lists.left}" + if (lists.leftAllowNone) " +None" else ""
                 )
             )
         } else if (restoreDialsAfter) {
