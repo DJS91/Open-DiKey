@@ -154,6 +154,9 @@ object AdasAutoApplyCoordinator {
         }
     }
 
+    /** Whether ADAS auto-apply is switched on (Custom mode + "auto-apply on launch"); if not, there is no profile to wait for. */
+    fun isAutoApplyActive(context: Context): Boolean = isEnabled(context.applicationContext)
+
     private fun isEnabled(app: Context): Boolean {
         val settings = AppSettings(app)
         return settings.adasEditMode == AdasEditMode.CUSTOM && settings.adasApplyOnBoot

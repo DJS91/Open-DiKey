@@ -22,6 +22,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.apps.ProjectionApps
+import com.sphy.airconcontroller.apps.ProjectionAutoSwitch
 import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.storage.AppSettings
@@ -29,6 +30,7 @@ import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.update.AppUpdater
 import com.sphy.airconcontroller.usb.UsbPermissionReceiver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,6 +40,10 @@ class MainActivity : OpenDiKeyActivity() {
     private lateinit var connStatus: android.widget.TextView
     private lateinit var connDot: android.view.View
     private var dotPulse: ObjectAnimator? = null
+
+    /** The running automatic switch to CarPlay, if any; a touch anywhere cancels it. */
+    private var autoSwitchCountdown: Job? = null
+    private var swallowingCancelTouch = false
     private lateinit var adasIcon: android.widget.ImageView
 
     private val adasHoldHandler = Handler(Looper.getMainLooper())
@@ -184,6 +190,10 @@ class MainActivity : OpenDiKeyActivity() {
     /**
      * Shows a shortcut to the car's CarPlay / Android Auto app, but only while a phone is projecting
      * (see [ProjectionApps.isPhoneProjecting]). Re-checked every few seconds while this screen is visible.
+     *
+     * With "Switch to CarPlay automatically" on, it also starts a short countdown and then opens that app,
+     * once, when a phone is projecting and the ADAS profile is applied (see [ProjectionAutoSwitch]).
+     * Touching the screen during the countdown cancels it (see [dispatchTouchEvent]).
      */
     private fun setUpProjectionShortcut() {
         val tile = findViewById<android.view.View>(R.id.homeProjectionButton)
@@ -193,13 +203,13 @@ class MainActivity : OpenDiKeyActivity() {
 
         tile.setOnClickListener {
             val entry = shown ?: return@setOnClickListener
-            runCatching { startActivity(entry.launchIntent) }.onFailure {
-                Toast.makeText(this, getString(R.string.projection_open_failed, entry.label), Toast.LENGTH_SHORT).show()
-            }
+            openProjection(entry)
         }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Children of this scope are cancelled when the screen stops, which also cancels a countdown.
+                val scope = this
                 while (true) {
                     val (entry, projecting) = withContext(Dispatchers.IO) {
                         val app = runCatching { ProjectionApps.find(this@MainActivity) }.getOrNull()
@@ -220,10 +230,68 @@ class MainActivity : OpenDiKeyActivity() {
                         }
                         shown = target
                     }
+
+                    if (AppSettings(this@MainActivity).autoSwitchToCarPlay) {
+                        // With ADAS auto-apply off there is no profile to wait for, so don't wait on it.
+                        val adasApplied = !AdasAutoApplyCoordinator.isAutoApplyActive(this@MainActivity) ||
+                            AdasAutoApplyCoordinator.succeeded.value
+                        if (autoSwitchCountdown?.isActive == true && ProjectionAutoSwitch.shouldAbort(projecting, adasApplied)) {
+                            autoSwitchCountdown?.cancel()
+                        }
+                        if (entry != null && ProjectionAutoSwitch.shouldStart(projecting, adasApplied)) {
+                            autoSwitchCountdown = scope.launch { runAutoSwitchCountdown(entry) }
+                        }
+                    } else {
+                        autoSwitchCountdown?.cancel()
+                    }
                     delay(PROJECTION_POLL_MS)
                 }
             }
         }
+    }
+
+    /**
+     * Counts down on the tile's subtitle ("Launching in 3...2...1...") and then opens [entry]. Cancelling the
+     * coroutine (a touch, the phone disconnecting, leaving the screen) restores the subtitle.
+     */
+    private suspend fun runAutoSwitchCountdown(entry: ProjectionApps.Entry) {
+        val subtitle = findViewById<android.widget.TextView>(R.id.homeProjectionSubtitle)
+        val normalText = getString(R.string.projection_home_subtitle)
+        try {
+            for (second in AUTO_SWITCH_COUNTDOWN_S downTo 1) {
+                val steps = (AUTO_SWITCH_COUNTDOWN_S downTo second).joinToString("...") + "..."
+                subtitle.text = getString(R.string.projection_auto_launching, steps)
+                delay(1_000L)
+            }
+            openProjection(entry)
+        } finally {
+            subtitle.text = normalText
+        }
+    }
+
+    private fun openProjection(entry: ProjectionApps.Entry) {
+        runCatching { startActivity(entry.launchIntent) }.onFailure {
+            Toast.makeText(this, getString(R.string.projection_open_failed, entry.label), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Any touch while the automatic switch is counting down cancels it. That touch is swallowed, so a
+     * stray tap meant to stop the countdown can't also press a tile underneath.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && autoSwitchCountdown?.isActive == true) {
+            autoSwitchCountdown?.cancel()
+            swallowingCancelTouch = true
+            return true
+        }
+        if (swallowingCancelTouch) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+                swallowingCancelTouch = false
+            }
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onDestroy() {
@@ -328,6 +396,7 @@ class MainActivity : OpenDiKeyActivity() {
         private const val ADAS_HOLD_MS = 5_000L
         private const val DOT_PULSE_MS = 800L
         private const val PROJECTION_POLL_MS = 4_000L
+        private const val AUTO_SWITCH_COUNTDOWN_S = 3
         private const val DOT_PULSE_MIN_ALPHA = 0.2f
     }
 }

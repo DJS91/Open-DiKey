@@ -53,6 +53,10 @@ class SettingsHubActivity : OpenDiKeyActivity() {
             isChecked = settings.openAppOnBoot
             setOnCheckedChangeListener { _, checked -> settings.openAppOnBoot = checked }
         }
+        findViewById<SwitchMaterial>(R.id.settingsAutoCarPlaySwitch).apply {
+            isChecked = settings.autoSwitchToCarPlay
+            setOnCheckedChangeListener { _, checked -> settings.autoSwitchToCarPlay = checked }
+        }
         setUpThemeToggle(settings)
         setUpStyleToggle(settings)
     }

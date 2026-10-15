@@ -375,6 +375,13 @@ class AppSettings(context: Context) {
             prefs.edit().putBoolean(KEY_OPEN_APP_ON_BOOT, value).apply()
         }
 
+    /** Jump to CarPlay / Android Auto after a short countdown once a phone is projecting and ADAS is applied. Off until the user opts in. */
+    var autoSwitchToCarPlay: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SWITCH_CARPLAY, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_AUTO_SWITCH_CARPLAY, value).apply()
+        }
+
     /** Dark until the user picks otherwise, which is how the app looked before themes existed. */
     var themeMode: ThemeMode
         get() = ThemeMode.entries.firstOrNull { it.name == prefs.getString(KEY_THEME_MODE, null) }
@@ -573,6 +580,7 @@ class AppSettings(context: Context) {
         private const val KEY_ADAS_CUSTOM_DMS = "adas_custom_dms"
         private const val KEY_ADAS_APPLY_ON_BOOT = "adas_apply_on_boot"
         private const val KEY_OPEN_APP_ON_BOOT = "open_app_on_boot"
+        private const val KEY_AUTO_SWITCH_CARPLAY = "auto_switch_carplay"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_THEME_STYLE = "theme_style"
         private const val KEY_PET_FAN_LEVEL = "pet_fan_level"
