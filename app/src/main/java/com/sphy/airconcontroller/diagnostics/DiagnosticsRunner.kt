@@ -991,12 +991,19 @@ class DiagnosticsRunner(
      */
     private suspend fun projection() {
         val found = ProjectionApps.find(app)
-        kv("Home shortcut would show", found?.let { "${it.label} (${it.packageName})" } ?: "no — nothing listed")
+        kv("App to launch", found?.let { "${it.label} (${it.packageName})" } ?: "none installed")
         ProjectionApps.report(app).forEach { line("  $it") }
+        val projecting = ProjectionApps.isPhoneProjecting(app)
+        kv("Phone projecting (Bluetooth policy signal)", projecting ?: "unknown (ADB unavailable)")
+        kv("Home shortcut would show", if (found != null && projecting == true) "yes" else "no")
         check(
             Status.INFO,
             "Phone projection apps",
-            found?.let { "listed: ${it.label}" } ?: "none listed (phone not connected?)",
+            when (projecting) {
+                true -> "phone projecting"
+                false -> "no phone projecting"
+                null -> "unknown"
+            },
         )
 
         line()

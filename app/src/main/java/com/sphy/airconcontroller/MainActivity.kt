@@ -182,8 +182,8 @@ class MainActivity : OpenDiKeyActivity() {
     }
 
     /**
-     * Shows a shortcut to the car's CarPlay / Android Auto app, but only while that app is listed
-     * (i.e. a phone is connected). Re-checked every few seconds while this screen is visible.
+     * Shows a shortcut to the car's CarPlay / Android Auto app, but only while a phone is projecting
+     * (see [ProjectionApps.isPhoneProjecting]). Re-checked every few seconds while this screen is visible.
      */
     private fun setUpProjectionShortcut() {
         val tile = findViewById<android.view.View>(R.id.homeProjectionButton)
@@ -201,19 +201,25 @@ class MainActivity : OpenDiKeyActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
-                    val entry = withContext(Dispatchers.Default) {
-                        runCatching { ProjectionApps.find(this@MainActivity) }.getOrNull()
+                    val (entry, projecting) = withContext(Dispatchers.IO) {
+                        val app = runCatching { ProjectionApps.find(this@MainActivity) }.getOrNull()
+                        val active = if (app == null) false else runCatching { ProjectionApps.isPhoneProjecting(this@MainActivity) }.getOrNull()
+                        app to active
                     }
-                    if (entry?.packageName != shown?.packageName) {
-                        if (entry != null) {
-                            icon.setImageDrawable(entry.icon)
-                            title.text = entry.label
-                            tile.contentDescription = entry.label
+                    // null means "couldn't tell": leave the tile as it is rather than flicker it.
+                    if (projecting != null) {
+                        val target = if (projecting) entry else null
+                        if (target?.packageName != shown?.packageName) {
+                            if (target != null) {
+                                icon.setImageDrawable(target.icon)
+                                title.text = target.label
+                                tile.contentDescription = target.label
+                            }
+                            // INVISIBLE, not GONE: the slot stays reserved so the other tiles keep their size.
+                            tile.visibility = if (target != null) android.view.View.VISIBLE else android.view.View.INVISIBLE
                         }
-                        // INVISIBLE, not GONE: the slot stays reserved so the other tiles keep their size.
-                        tile.visibility = if (entry != null) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                        shown = target
                     }
-                    shown = entry
                     delay(PROJECTION_POLL_MS)
                 }
             }
@@ -321,7 +327,7 @@ class MainActivity : OpenDiKeyActivity() {
         private const val BT_PERMISSION_REQUEST = 1001
         private const val ADAS_HOLD_MS = 5_000L
         private const val DOT_PULSE_MS = 800L
-        private const val PROJECTION_POLL_MS = 3_000L
+        private const val PROJECTION_POLL_MS = 4_000L
         private const val DOT_PULSE_MIN_ALPHA = 0.2f
     }
 }
