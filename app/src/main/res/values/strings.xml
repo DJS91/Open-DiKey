@@ -6,7 +6,7 @@
   <string name="debug_menu_title">Debug</string>
   <string name="projection_home_subtitle">Phone connected — tap to switch</string>
   <string name="projection_open_failed">Couldn\'t open %1$s</string>
-  <string name="projection_auto_launching">Launching in %1$s\nTap anywhere to cancel</string>
+  <string name="projection_auto_launching">Launching in %1$d\nTap anywhere to cancel</string>
   <string name="settings_auto_carplay">Switch to CarPlay automatically</string>
   <string name="settings_auto_carplay_hint">When a phone is connected and your ADAS profile is applied, shows a 3 second countdown on the CarPlay tile and then opens CarPlay or Android Auto. Tap anywhere on the screen to cancel. Works while the Open DiKey home screen is showing. If ADAS auto-apply is off, only the phone connection is waited for.</string>
   <string name="settings_appearance_title">Appearance</string>

@@ -251,7 +251,7 @@ class MainActivity : OpenDiKeyActivity() {
     }
 
     /**
-     * Counts down on the tile's subtitle ("Launching in 3...2...1...") and then opens [entry]. Cancelling the
+     * Counts down on the tile's subtitle ("Launching in 3", "Launching in 2", "Launching in 1") and then opens [entry]. Cancelling the
      * coroutine (a touch, the phone disconnecting, leaving the screen) restores the subtitle.
      */
     private suspend fun runAutoSwitchCountdown(entry: ProjectionApps.Entry) {
@@ -259,8 +259,7 @@ class MainActivity : OpenDiKeyActivity() {
         val normalText = getString(R.string.projection_home_subtitle)
         try {
             for (second in AUTO_SWITCH_COUNTDOWN_S downTo 1) {
-                val steps = (AUTO_SWITCH_COUNTDOWN_S downTo second).joinToString("...") + "..."
-                subtitle.text = getString(R.string.projection_auto_launching, steps)
+                subtitle.text = getString(R.string.projection_auto_launching, second)
                 delay(1_000L)
             }
             openProjection(entry)
