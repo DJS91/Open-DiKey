@@ -16,6 +16,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -26,7 +27,7 @@ import java.util.UUID
 
 @SuppressLint("MissingPermission")
 class EvakoolClient(private val context: Context, private val changed: () -> Unit) {
-    data class Device(val address: String, val name: String)
+    data class Device(val address: String, val name: String, val recommended: Boolean = false)
     data class Pending(val compartment: Int, val temperature: Int, val celsius: Boolean)
 
     private val handler = Handler(Looper.getMainLooper())
@@ -43,7 +44,6 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
     private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
     private val found = linkedMapOf<String, Device>()
     var devicesChanged: ((List<Device>) -> Unit)? = null
-    var scanFinished: (() -> Unit)? = null
 
     val selectedName: String? get() = prefs.getString("name", null)
     val selectedAddress: String? get() = prefs.getString("address", null)
@@ -393,32 +393,43 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
     }
 
     fun scan() {
+        stopScan()
         closeGatt()
         status = null
         pending = null
+        found.clear()
+        devicesChanged?.invoke(emptyList())
         if (!hasPermissions()) return update(R.string.fridge_permission_needed)
+        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            return update(R.string.fridge_no_bluetooth)
+        }
         try {
             val bluetooth = adapter ?: return update(R.string.fridge_no_bluetooth)
             if (!bluetooth.isEnabled) return update(R.string.fridge_bluetooth_off)
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R &&
+                context.getSystemService(LocationManager::class.java)?.isLocationEnabled != true
+            ) {
+                return update(R.string.fridge_location_off)
+            }
             val le = bluetooth.bluetoothLeScanner ?: return update(R.string.fridge_no_bluetooth)
-            stopScan()
-            found.clear()
-            devicesChanged?.invoke(emptyList())
             val callback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) {
                     handler.post {
                         if (scanCallback !== this || !scanning) return@post
                         try {
-                            val name = result.scanRecord?.deviceName ?: result.device.name.orEmpty()
+                            val name = result.scanRecord?.deviceName?.takeIf { it.isNotBlank() }
+                                ?: result.device.name.orEmpty()
                             val service = result.scanRecord?.serviceUuids.orEmpty().any {
                                 it.uuid.toString() == EvakoolProtocol.SERVICE_UUID
                             }
-                            if (result.isConnectable && (EvakoolProtocol.matchesName(name) || service)) {
+                            if (result.isConnectable) {
                                 val device = Device(result.device.address, name.ifBlank {
-                                    context.getString(R.string.fridge_title)
-                                })
-                                found[device.address] = device
-                                devicesChanged?.invoke(found.values.toList())
+                                    context.getString(R.string.fridge_unnamed_device)
+                                }, EvakoolProtocol.matchesName(name) || service)
+                                if (found[device.address] != device) {
+                                    found[device.address] = device
+                                    devicesChanged?.invoke(found.values.toList())
+                                }
                             }
                         } catch (e: SecurityException) {
                             stopScan()
@@ -427,12 +438,15 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
                     }
                 }
 
+                override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                    results.forEach { onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, it) }
+                }
+
                 override fun onScanFailed(errorCode: Int) {
                     handler.post {
                         if (scanCallback !== this) return@post
                         stopScan()
                         update(R.string.fridge_scan_failed, errorCode)
-                        scanFinished?.invoke()
                     }
                 }
             }
@@ -445,13 +459,16 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         } catch (e: SecurityException) {
             stopScan()
             permissionFailure(e)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Bluetooth became unavailable while scanning", e)
+            stopScan()
+            update(R.string.fridge_bluetooth_off)
         }
     }
 
     private val scanTimeout = Runnable {
         stopScan()
         update(if (found.isEmpty()) R.string.fridge_no_devices else R.string.fridge_scan_done)
-        scanFinished?.invoke()
     }
 
     fun stopScan() {

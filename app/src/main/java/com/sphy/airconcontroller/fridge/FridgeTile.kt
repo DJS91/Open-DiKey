@@ -1,8 +1,11 @@
 package com.sphy.airconcontroller.fridge
 
 import android.text.InputType
+import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +19,7 @@ class FridgeTile(private val activity: MainActivity) {
     private val status = activity.findViewById<TextView>(R.id.homeFridgeStatus)
     private val client = EvakoolClient(activity.applicationContext, ::render)
     private var dialog: AlertDialog? = null
+    private var renderPicker: (() -> Unit)? = null
     private val permissions = activity.registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
@@ -41,7 +45,7 @@ class FridgeTile(private val activity: MainActivity) {
         dialog?.dismiss()
         dialog = null
         client.devicesChanged = null
-        client.scanFinished = null
+        renderPicker = null
     }
 
     private fun render() {
@@ -53,6 +57,7 @@ class FridgeTile(private val activity: MainActivity) {
             value.leftTarget, value.rightTarget,
         )
         status.text = listOfNotNull(client.selectedName, client.message).joinToString("\n")
+        renderPicker?.invoke()
     }
 
     private fun chooseDevice() {
@@ -63,28 +68,69 @@ class FridgeTile(private val activity: MainActivity) {
     private fun showDevices() {
         dialog?.dismiss()
         var devices = emptyList<EvakoolClient.Device>()
-        val adapter = ArrayAdapter<String>(activity, android.R.layout.simple_list_item_1)
+        var visibleDevices = emptyList<EvakoolClient.Device>()
+        val view = activity.layoutInflater.inflate(R.layout.dialog_fridge_devices, null)
+        val scanStatus = view.findViewById<TextView>(R.id.fridgeScanStatus)
+        val progress = view.findViewById<View>(R.id.fridgeScanProgress)
+        val showAll = view.findViewById<CheckBox>(R.id.fridgeShowAllDevices)
+        val list = view.findViewById<ListView>(R.id.fridgeDeviceList)
+        val empty = view.findViewById<TextView>(R.id.fridgeScanEmpty)
+        val adapter = ArrayAdapter<String>(activity, R.layout.item_fridge_device)
+        list.adapter = adapter
+        list.emptyView = empty
         val picker = AlertDialog.Builder(activity)
-            .setTitle(R.string.fridge_scanning)
-            .setAdapter(adapter) { _, position -> client.select(devices[position]) }
+            .setView(view)
+            .setPositiveButton(R.string.fridge_scan_again, null)
             .setNegativeButton(android.R.string.cancel, null)
             .create()
         dialog = picker
+        renderPicker = {
+            visibleDevices = devices.filter { showAll.isChecked || it.recommended }
+                .sortedByDescending { it.recommended }
+            adapter.clear()
+            adapter.addAll(visibleDevices.map { device ->
+                activity.getString(
+                    if (device.recommended) R.string.fridge_device_recommended else R.string.fridge_device_other,
+                    device.name, device.address,
+                )
+            })
+            scanStatus.text = activity.getString(
+                R.string.fridge_scan_summary, client.message, devices.size, visibleDevices.size,
+            )
+            progress.visibility = if (client.scanning) View.VISIBLE else View.GONE
+            empty.setText(
+                when {
+                    devices.isNotEmpty() && visibleDevices.isEmpty() -> R.string.fridge_scan_hidden
+                    client.scanning -> R.string.fridge_scan_empty
+                    else -> R.string.fridge_scan_empty_finished
+                },
+            )
+            picker.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !client.scanning
+        }
         client.devicesChanged = {
             devices = it
-            adapter.clear()
-            adapter.addAll(it.map { device -> "${device.name}\n${device.address}" })
+            renderPicker?.invoke()
         }
-        client.scanFinished = { picker.setTitle(client.message) }
+        showAll.setOnCheckedChangeListener { _, _ -> renderPicker?.invoke() }
+        list.setOnItemClickListener { _, _, position, _ ->
+            val device = visibleDevices[position]
+            // End the scan before connecting; dismiss must not start a second connection.
+            picker.setOnDismissListener(null)
+            client.devicesChanged = null
+            renderPicker = null
+            picker.dismiss()
+            client.select(device)
+        }
         picker.setOnDismissListener {
             client.stopScan()
             client.devicesChanged = null
-            client.scanFinished = null
+            renderPicker = null
             if (client.selectedAddress != null) client.start()
         }
         picker.show()
+        picker.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { client.scan() }
         client.scan()
-        if (!client.scanning) picker.setTitle(client.message)
+        renderPicker?.invoke()
     }
 
     private fun showActions() {

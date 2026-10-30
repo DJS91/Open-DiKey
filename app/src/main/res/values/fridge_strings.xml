@@ -43,4 +43,15 @@
     <string name="fridge_scan_done">Select your fridge</string>
     <string name="fridge_no_devices">No fridge found. Check power, range and Android 11 Location, and disconnect the official app.</string>
     <string name="fridge_scan_failed">Bluetooth scan failed (%1$d). Try again.</string>
+    <string name="fridge_location_off">Android 11 requires system Location to be switched on for BLE scanning. Enable it in system Settings, then tap Scan again.</string>
+    <string name="fridge_scan_again">Scan again</string>
+    <string name="fridge_show_all">Show all nearby BLE devices</string>
+    <string name="fridge_scan_summary">%1$s\nNearby BLE devices: %2$d. Shown: %3$d.</string>
+    <string name="fridge_scan_empty">Searching for your fridge. Devices will appear here as they are found.</string>
+    <string name="fridge_scan_hidden">Nearby devices were found, but none matched the expected fridge name. Enable Show all nearby BLE devices.</string>
+    <string name="fridge_scan_empty_finished">No devices to select. Check the scan status above, then tap Scan again.</string>
+    <string name="fridge_scan_help">Close the official fridge app. Keep the fridge powered on and nearby. If its name differs, show all BLE devices and select only your fridge. The app checks its EVAKOOL service before sending commands.</string>
+    <string name="fridge_device_recommended">%1$s (EVAKOOL match)\n%2$s</string>
+    <string name="fridge_device_other">%1$s\n%2$s</string>
+    <string name="fridge_unnamed_device">Unnamed BLE device</string>
 </resources>
