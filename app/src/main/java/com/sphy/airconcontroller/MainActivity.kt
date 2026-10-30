@@ -25,6 +25,7 @@ import com.sphy.airconcontroller.apps.ProjectionApps
 import com.sphy.airconcontroller.apps.ProjectionAutoSwitch
 import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
+import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.update.AppUpdater
@@ -37,6 +38,7 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : OpenDiKeyActivity() {
     private lateinit var session: DiKeySession
+    private lateinit var fridgeTile: FridgeTile
     private lateinit var connStatus: android.widget.TextView
     private lateinit var connDot: android.view.View
     private var dotPulse: ObjectAnimator? = null
@@ -56,6 +58,7 @@ class MainActivity : OpenDiKeyActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        fridgeTile = FridgeTile(this)
 
         session = OpenDiKeyApp.from(this).dikey
         connStatus = findViewById(R.id.mainConnStatus)
@@ -148,6 +151,7 @@ class MainActivity : OpenDiKeyActivity() {
 
     override fun onStart() {
         super.onStart()
+        fridgeTile.start()
         session.ensureConnected()
         // Re-kick ADAS auto-apply here too: if the process was already spun up at boot by
         // KeepAliveNotificationListener before the car's ADAS services were ready, opening the
@@ -291,6 +295,11 @@ class MainActivity : OpenDiKeyActivity() {
             return true
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    override fun onStop() {
+        fridgeTile.stop()
+        super.onStop()
     }
 
     override fun onDestroy() {
