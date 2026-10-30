@@ -1,5 +1,10 @@
 <resources>
     <string name="fridge_title">Camping fridge</string>
+    <string name="fridge_transport_usb">ESP32 USB fridge - read-only</string>
+    <string name="fridge_transport_android">Android Bluetooth backup</string>
+    <string name="fridge_use_android">Use Android Bluetooth backup</string>
+    <string name="fridge_use_usb">Use ESP32 USB (read-only)</string>
+    <string name="fridge_android_wait_off">Waiting for the ESP32 to confirm fridge OFF. Update its firmware or unplug USB before using Android Bluetooth.</string>
     <string name="fridge_select_hint">Tap to select your EVAKOOL fridge</string>
     <string name="fridge_no_readings">Left: &#8212; / Right: &#8212;\nNo live readings</string>
     <string name="fridge_readings">Left: %1$d / Right: %2$d &#176;%3$s\nTargets: %4$d / %5$d &#176;%3$s</string>

@@ -162,6 +162,9 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
             val session = OpenDiKeyApp.from(this@BluetoothDiagnosticsActivity).dikey
             appendLine("DiKey connected: ${session.isConnected}")
             appendLine("DiKey USB bridge open: ${session.isUsbOpen}")
+            appendLine("ESP32 fridge firmware confirmed: ${session.usbBridge.fridge.supported}")
+            appendLine("ESP32 fridge enabled: ${session.usbBridge.fridge.enabled}")
+            appendLine("ESP32 fridge status: ${session.usbBridge.fridge.message}")
             appendLine("DiKey scanner state: ${session.bleScanState.value}")
             appendLine("This test does not disconnect DiKey or connect/write to any BLE device.")
             appendLine("USB bridge radio traffic is separate from the head-unit Bluetooth adapter.")

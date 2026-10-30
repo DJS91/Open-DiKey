@@ -4,10 +4,12 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.sphy.airconcontroller.dikey.DiKeyController
 import com.sphy.airconcontroller.dikey.DiKeyFrameSink
 import com.sphy.airconcontroller.dikey.DiKeyProtocol
+import com.sphy.airconcontroller.fridge.UsbFridgeSession
 
 /**
  * USB serial link to firmware/src/DiKeyUsbBridge. The C3 owns DiKey GATT;
@@ -23,11 +25,31 @@ class DiKeyUsbBridge(
         controller.onWriteComplete(false)
     }
     private var dikeyReady = false
+    val fridge = UsbFridgeSession { line ->
+        serial.writeLine(line).also { sent ->
+            if (!sent) Log.w(TAG, "Fridge USB write failed: $line")
+        }
+    }
+    private val fridgeTick = object : Runnable {
+        override fun run() {
+            if (fridge.open && !serial.isOpen) fridge.onClose()
+            fridge.tick(SystemClock.elapsedRealtime())
+            if (fridge.open) main.postDelayed(this, 250)
+        }
+    }
 
-    val serial = UsbHostSerial(
+    val serial: UsbHostSerial = UsbHostSerial(
         usbManager,
         onLine = { line -> handleLine(line) },
-        onState = { msg -> controller.postStatus("USB · $msg") }
+        onState = { msg ->
+            if (msg == "USB read ended") {
+                serial.close()
+                dikeyReady = false
+                controller.onTransportDown(msg)
+            }
+            if (!serial.isOpen && fridge.open) fridge.onClose()
+            controller.postStatus("USB · $msg")
+        }
     )
 
     val isUsbOpen: Boolean get() = serial.isOpen
@@ -42,13 +64,18 @@ class DiKeyUsbBridge(
             return err
         }
         serial.writeLine("STATUS")
+        fridge.onOpen(SystemClock.elapsedRealtime())
+        main.removeCallbacks(fridgeTick)
+        main.post(fridgeTick)
         return null
     }
 
     fun close() {
         dikeyReady = false
         main.removeCallbacks(writeTimeout)
+        main.removeCallbacks(fridgeTick)
         serial.close()
+        fridge.onClose()
         controller.attachSink(null)
     }
 
@@ -64,6 +91,13 @@ class DiKeyUsbBridge(
     }
 
     private fun handleLine(line: String) {
+        if (fridge.onLine(line, SystemClock.elapsedRealtime())) {
+            Log.d(TAG, line)
+            return
+        }
+        if (line.startsWith("HELLO ODK-BRIDGE")) {
+            fridge.onOpen(SystemClock.elapsedRealtime())
+        }
         when {
             line.startsWith("RX ", ignoreCase = true) -> {
                 val bytes = DiKeyProtocol.parseHex(line.substring(3)) ?: return

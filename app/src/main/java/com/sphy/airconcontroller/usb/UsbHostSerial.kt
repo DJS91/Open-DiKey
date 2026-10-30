@@ -28,6 +28,8 @@ class UsbHostSerial(
 
     @Volatile
     private var running = false
+    @Volatile
+    private var generation = 0L
     private var connection: UsbDeviceConnection? = null
     private var dataInterface: UsbInterface? = null
     private var epIn: UsbEndpoint? = null
@@ -91,7 +93,10 @@ class UsbHostSerial(
         epOut = found.epOut
         armPort(conn, device, found.intf)
         running = true
-        reader = Thread({ readLoop() }, "odk-usb-read").also { it.start() }
+        val openedGeneration = generation
+        reader = Thread(
+            { readLoop(conn, found.epIn, openedGeneration) }, "odk-usb-read",
+        ).also { it.start() }
         postState("Open ${label(device)}")
         return null
     }
@@ -109,6 +114,7 @@ class UsbHostSerial(
 
     fun close() {
         running = false
+        generation++
         reader?.interrupt()
         reader = null
         runCatching {
@@ -122,19 +128,17 @@ class UsbHostSerial(
         postState("Disconnected")
     }
 
-    private fun readLoop() {
+    private fun readLoop(conn: UsbDeviceConnection, inp: UsbEndpoint, openedGeneration: Long) {
         val buf = ByteArray(256)
         val acc = StringBuilder()
-        while (running) {
-            val conn = connection
-            val inp = epIn
-            if (conn == null || inp == null) break
+        while (running && generation == openedGeneration) {
             val n = try {
                 conn.bulkTransfer(inp, buf, buf.size, READ_TIMEOUT_MS)
             } catch (t: Throwable) {
                 Log.w(TAG, "bulk IN failed", t)
                 break
             }
+            if (generation != openedGeneration) break
             if (n > 0) {
                 acc.append(String(buf, 0, n, Charsets.UTF_8))
                 var nl: Int
@@ -143,14 +147,22 @@ class UsbHostSerial(
                     acc.delete(0, nl + 1)
                     if (raw.isNotEmpty()) {
                         val line = raw
-                        main.post { onLine(line) }
+                        main.post {
+                            if (running && generation == openedGeneration) onLine(line)
+                        }
                     }
                 }
-                if (acc.length > 1024) acc.clear()
+                if (acc.length > 4096) {
+                    Log.w(TAG, "Discarding USB line exceeding 4096 characters")
+                    postState("USB line exceeded 4096 characters")
+                    acc.clear()
+                }
             }
         }
-        if (running) {
-            main.post { onState("USB read ended") }
+        if (running && generation == openedGeneration) {
+            main.post {
+                if (running && generation == openedGeneration) onState("USB read ended")
+            }
         }
     }
 

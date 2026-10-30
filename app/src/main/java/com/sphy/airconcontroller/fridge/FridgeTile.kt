@@ -1,5 +1,7 @@
 package com.sphy.airconcontroller.fridge
 
+import android.content.Context
+import android.os.SystemClock
 import android.text.InputType
 import android.view.View
 import android.widget.ArrayAdapter
@@ -11,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import com.sphy.airconcontroller.MainActivity
+import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.R
 import java.util.Locale
 
@@ -18,6 +21,11 @@ class FridgeTile(private val activity: MainActivity) {
     private val temperatures = activity.findViewById<TextView>(R.id.homeFridgeTemperatures)
     private val status = activity.findViewById<TextView>(R.id.homeFridgeStatus)
     private val client = EvakoolClient(activity.applicationContext, ::render)
+    private val usb = OpenDiKeyApp.from(activity).dikey.usbBridge.fridge
+    private val prefs = activity.getSharedPreferences("evakool", Context.MODE_PRIVATE)
+    private val useUsb: Boolean get() = prefs.getString("transport", "usb") != "android"
+    private var active = false
+    private var androidStarted = false
     private var dialog: AlertDialog? = null
     private var renderPicker: (() -> Unit)? = null
     private val permissions = activity.registerForActivityResult(
@@ -32,14 +40,23 @@ class FridgeTile(private val activity: MainActivity) {
 
     init {
         activity.findViewById<android.view.View>(R.id.homeFridgeButton).setOnClickListener {
-            if (client.selectedAddress == null) chooseDevice() else showActions()
+            showActions()
         }
         render()
     }
 
-    fun start() = client.start()
+    fun start() {
+        active = true
+        usb.changed = ::render
+        usb.setEnabled(useUsb, SystemClock.elapsedRealtime())
+        render()
+    }
 
     fun stop() {
+        active = false
+        androidStarted = false
+        usb.changed = null
+        usb.setEnabled(false, SystemClock.elapsedRealtime())
         dialog?.setOnDismissListener(null)
         client.stop()
         dialog?.dismiss()
@@ -49,23 +66,46 @@ class FridgeTile(private val activity: MainActivity) {
     }
 
     private fun render() {
-        val value = client.status
+        if (active && !useUsb) {
+            if (usb.safeForAndroid && !androidStarted) {
+                androidStarted = true
+                client.start()
+            } else if (!usb.safeForAndroid && androidStarted) {
+                androidStarted = false
+                client.stop()
+            }
+        }
+        val value = if (useUsb) usb.status else if (usb.safeForAndroid) client.status else null
         temperatures.text = if (value == null) activity.getString(R.string.fridge_no_readings)
         else activity.getString(
             R.string.fridge_readings,
             value.left, value.right, if (value.celsius) "C" else "F",
             value.leftTarget, value.rightTarget,
         )
-        status.text = listOfNotNull(client.selectedName, client.message).joinToString("\n")
+        status.text = if (useUsb) listOf(
+            activity.getString(R.string.fridge_transport_usb), usb.device, usb.message,
+        ).filter { it.isNotBlank() }.joinToString("\n")
+        else listOfNotNull(
+            activity.getString(R.string.fridge_transport_android), client.selectedName,
+            if (usb.safeForAndroid) client.message else usb.message,
+        ).joinToString("\n")
         renderPicker?.invoke()
     }
 
     private fun chooseDevice() {
+        if (useUsb || !usb.safeForAndroid) {
+            Toast.makeText(activity, R.string.fridge_android_wait_off, Toast.LENGTH_LONG).show()
+            return
+        }
         if (!client.hasPermissions()) permissions.launch(client.requiredPermissions())
         else showDevices()
     }
 
     private fun showDevices() {
+        if (useUsb || !usb.safeForAndroid) {
+            Toast.makeText(activity, R.string.fridge_android_wait_off, Toast.LENGTH_LONG).show()
+            return
+        }
         dialog?.dismiss()
         var devices = emptyList<EvakoolClient.Device>()
         var visibleDevices = emptyList<EvakoolClient.Device>()
@@ -125,7 +165,7 @@ class FridgeTile(private val activity: MainActivity) {
             client.stopScan()
             client.devicesChanged = null
             renderPicker = null
-            if (client.selectedAddress != null) client.start()
+            if (active && !useUsb && usb.safeForAndroid && client.selectedAddress != null) client.start()
         }
         picker.show()
         picker.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { client.scan() }
@@ -134,12 +174,12 @@ class FridgeTile(private val activity: MainActivity) {
     }
 
     private fun showActions() {
-        val canSet = client.ready && client.status != null && client.pending == null
+        val canSet = !useUsb && usb.safeForAndroid && client.ready && client.status != null && client.pending == null
         val actions = mutableListOf<Int>()
         if (canSet) actions.addAll(listOf(R.string.fridge_set_left, R.string.fridge_set_right))
-        actions.addAll(listOf(
-            R.string.fridge_details, R.string.fridge_reconnect, R.string.fridge_choose, R.string.fridge_forget,
-        ))
+        actions.addAll(listOf(R.string.fridge_details, R.string.fridge_reconnect))
+        if (!useUsb) actions.addAll(listOf(R.string.fridge_choose, R.string.fridge_forget))
+        actions.add(if (useUsb) R.string.fridge_use_android else R.string.fridge_use_usb)
         dialog = AlertDialog.Builder(activity)
             .setTitle(R.string.fridge_title)
             .setItems(actions.map(activity::getString).toTypedArray()) { _, index ->
@@ -149,13 +189,27 @@ class FridgeTile(private val activity: MainActivity) {
                     R.string.fridge_details -> showDetails()
                     R.string.fridge_choose -> chooseDevice()
                     R.string.fridge_reconnect -> {
-                        if (!client.hasPermissions()) chooseDevice() else client.reconnect()
+                        if (useUsb || !usb.safeForAndroid) usb.reconnect(SystemClock.elapsedRealtime())
+                        else if (!client.hasPermissions() || client.selectedAddress == null) chooseDevice()
+                        else client.reconnect()
                     }
                     R.string.fridge_forget -> client.forget()
+                    R.string.fridge_use_android -> switchTransport(false)
+                    R.string.fridge_use_usb -> switchTransport(true)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun switchTransport(toUsb: Boolean) {
+        dialog?.dismiss()
+        client.stop()
+        androidStarted = false
+        prefs.edit().putString("transport", if (toUsb) "usb" else "android").apply()
+        usb.setEnabled(toUsb && active, SystemClock.elapsedRealtime())
+        if (!toUsb && !usb.safeForAndroid) usb.reconnect(SystemClock.elapsedRealtime())
+        render()
     }
 
     private fun showDetails() {
@@ -163,14 +217,17 @@ class FridgeTile(private val activity: MainActivity) {
             .setTitle(R.string.fridge_details)
             .setMessage(activity.getString(
                 R.string.fridge_details_text,
-                client.selectedName.orEmpty(), client.selectedAddress.orEmpty(), client.message,
-                client.lastFrame ?: activity.getString(R.string.fridge_no_readings),
+                if (useUsb) activity.getString(R.string.fridge_transport_usb) else client.selectedName.orEmpty(),
+                if (useUsb) usb.device else client.selectedAddress.orEmpty(),
+                if (useUsb || !usb.safeForAndroid) usb.message else client.message,
+                (if (useUsb) usb.lastFrame else client.lastFrame) ?: activity.getString(R.string.fridge_no_readings),
             ))
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 
     private fun editTemperature(compartment: Int) {
+        if (useUsb || !usb.safeForAndroid) return
         val value = client.status ?: return
         val input = EditText(activity).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
@@ -192,7 +249,7 @@ class FridgeTile(private val activity: MainActivity) {
                 val target = input.text.toString().trim().toIntOrNull()
                 if (target == null || target !in -99..99) {
                     input.error = activity.getString(R.string.fridge_invalid_target)
-                } else if (!client.ready || client.status?.celsius != value.celsius) {
+                } else if (useUsb || !usb.safeForAndroid || !client.ready || client.status?.celsius != value.celsius) {
                     input.error = activity.getString(R.string.fridge_not_ready)
                 } else {
                     client.setTemperature(compartment, target)
