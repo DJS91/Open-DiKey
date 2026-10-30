@@ -1,0 +1,12 @@
+<resources>
+    <string name="bt_diag_title">Bluetooth / fridge diagnostics</string>
+    <string name="bt_diag_intro">Check permissions and Location, then run a 15-second raw BLE scan. This test counts all advertisements, including unnamed and non-connectable devices. It does not disconnect DiKey, pair, connect, or send device commands. Keep this page visible during the test. Reports contain nearby device names and addresses; review before sharing.</string>
+    <string name="bt_diag_refresh">Refresh checks</string>
+    <string name="bt_diag_permissions">Request permissions</string>
+    <string name="bt_diag_app_settings">App permissions</string>
+    <string name="bt_diag_location">Location settings</string>
+    <string name="bt_diag_bluetooth">Bluetooth settings</string>
+    <string name="bt_diag_scan">Run BLE scan (15s)</string>
+    <string name="bt_diag_stop">Stop scan</string>
+    <string name="bt_diag_settings_unavailable">This settings screen is unavailable or blocked by the head unit. See the diagnostic report.</string>
+</resources>

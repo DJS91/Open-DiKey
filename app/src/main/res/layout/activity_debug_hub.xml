@@ -39,14 +39,25 @@
         <include layout="@layout/view_back_button_end" />
     </LinearLayout>
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_weight="1">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="20dp"
         android:paddingEnd="20dp"
         android:paddingBottom="24dp">
+
+        <Button
+            android:id="@+id/openBluetoothDiagnosticsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="@string/bt_diag_title" />
 
         <LinearLayout
             android:id="@+id/openDiagnosticsButton"
@@ -137,9 +148,8 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:layout_weight="1"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -204,8 +214,7 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="wrap_content"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -268,4 +277,5 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+    </ScrollView>
 </LinearLayout>

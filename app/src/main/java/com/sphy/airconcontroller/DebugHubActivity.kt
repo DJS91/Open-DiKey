@@ -19,6 +19,9 @@ class DebugHubActivity : OpenDiKeyActivity() {
         findViewById<android.view.View>(R.id.openDiagnosticsButton).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
+        findViewById<android.view.View>(R.id.openBluetoothDiagnosticsButton).setOnClickListener {
+            startActivity(Intent(this, BluetoothDiagnosticsActivity::class.java))
+        }
         findViewById<android.view.View>(R.id.openAdasLogButton).setOnClickListener {
             startActivity(Intent(this, AdasAutoApplyLogActivity::class.java))
         }
@@ -54,4 +57,3 @@ class DebugHubActivity : OpenDiKeyActivity() {
         const val BYD_ADB_SERVICE_URI = "byd_pad://secretcode:9521/adbactivity"
     }
 }
-
