@@ -66,9 +66,13 @@ class FridgeTile(private val activity: MainActivity) {
                 },
             )
             reconnect.visibility = View.GONE
+            status.visibility = View.VISIBLE
         } else {
             temperatures.setText(R.string.fridge_disconnected_tile)
             status.text = controller.message
+            // The button takes the status line's place so the tile keeps the row's height;
+            // the detailed reason remains on the fridge page and in the accessibility text.
+            status.visibility = View.GONE
             reconnect.visibility = View.VISIBLE
         }
         tile.contentDescription = listOf(
