@@ -56,6 +56,27 @@ struct Endpoint {
 };
 Endpoint dikey(false);
 Endpoint fridge(true);
+
+// Scan diagnostics: every advertisement the ESP32 receives, not only matches.
+// Protected by discoveryMutex (written from the NimBLE host task).
+struct SeenDevice {
+  NimBLEAddress address;
+  char name[25];
+  int rssi;
+  bool connectable;
+  bool fridgeMatch;
+  uint16_t hits;
+};
+constexpr size_t kMaxSeen = 40;
+constexpr uint32_t kDiagScanMs = 15000;
+SeenDevice seen[kMaxSeen];
+size_t seenCount = 0;
+uint32_t advCount = 0;
+uint32_t seenSinceMs = 0;
+uint32_t scanStartFailures = 0;
+bool diagScanActive = false;
+uint32_t diagScanUntil = 0;
+bool scanRestart = false;
 String lineBuf;
 bool lineOverflow = false;
 bool usbAnnounced = false;
@@ -153,8 +174,51 @@ bool matchesName(const std::string &name, bool isFridge) {
   return compact.indexOf("coolride") >= 0;
 }
 
+void recordSeen(const NimBLEAdvertisedDevice *dev) {
+  const NimBLEAddress address = dev->getAddress();
+  const std::string name = dev->getName();
+  const bool match = matchesName(name, true) || dev->isAdvertisingService(kFridgeService);
+  xSemaphoreTake(discoveryMutex, portMAX_DELAY);
+  ++advCount;
+  SeenDevice *slot = nullptr;
+  for (size_t i = 0; i < seenCount; ++i) {
+    if (seen[i].address == address) { slot = &seen[i]; break; }
+  }
+  if (slot == nullptr && seenCount < kMaxSeen) {
+    slot = &seen[seenCount++];
+    slot->address = address;
+    slot->name[0] = '\0';
+    slot->fridgeMatch = false;
+    slot->hits = 0;
+  }
+  if (slot != nullptr) {
+    if (!name.empty()) {
+      size_t n = 0;
+      for (; n < name.size() && n < sizeof(slot->name) - 1; ++n) {
+        const uint8_t c = static_cast<uint8_t>(name[n]);
+        slot->name[n] = (c < 32 || c > 126) ? '?' : static_cast<char>(c);
+      }
+      slot->name[n] = '\0';
+    }
+    slot->rssi = dev->getRSSI();
+    slot->connectable = dev->isConnectable();
+    slot->fridgeMatch = slot->fridgeMatch || match;
+    if (slot->hits < UINT16_MAX) ++slot->hits;
+  }
+  xSemaphoreGive(discoveryMutex);
+}
+
+void clearSeen() {
+  xSemaphoreTake(discoveryMutex, portMAX_DELAY);
+  seenCount = 0;
+  advCount = 0;
+  seenSinceMs = millis();
+  xSemaphoreGive(discoveryMutex);
+}
+
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice *dev) override {
+    recordSeen(dev);
     for (Endpoint *e : {&dikey, &fridge}) {
       if (!e->discover.load()) continue;
       const NimBLEUUID &svc = e->fridge ? kFridgeService : kDiKeyService;
@@ -205,10 +269,18 @@ void retry(Endpoint &e, const String &reason, bool error) {
 
 void refreshScan() {
   NimBLEScan *scan = NimBLEDevice::getScan();
-  const bool needed = dikey.discover.load() || fridge.discover.load();
+  const bool needed = dikey.discover.load() || fridge.discover.load() || diagScanActive;
+  if (needed && scan->isScanning() && scanRestart) {
+    // The duplicate filter hides devices already seen in this scan run, e.g. a fridge
+    // seen while only DiKey was wanted. Restart so newly wanted targets are reported.
+    scan->stop();
+  }
+  scanRestart = false;
   if (needed && !scan->isScanning()) {
     // Reset duplicate cache on each restart so previously seen devices can retry.
     if (!scan->start(0, false, true)) {
+      ++scanStartFailures;
+      usbPrint("LOG BLE scan start failed");
       for (Endpoint *e : {&dikey, &fridge}) {
         if (e->discover.load()) retry(*e, "scan start failed", true);
       }
@@ -216,6 +288,39 @@ void refreshScan() {
   } else if (!needed && scan->isScanning()) {
     scan->stop();
   }
+}
+
+void printDiag() {
+  NimBLEScan *scan = NimBLEDevice::getScan();
+  xSemaphoreTake(discoveryMutex, portMAX_DELAY);
+  const size_t count = seenCount;
+  static SeenDevice copy[kMaxSeen];
+  for (size_t i = 0; i < count; ++i) copy[i] = seen[i];
+  const uint32_t adv = advCount;
+  const uint32_t since = seenSinceMs;
+  xSemaphoreGive(discoveryMutex);
+  String head = "FRIDGE DIAG BEGIN scanning=";
+  head += scan->isScanning() ? "1" : "0";
+  head += " diagScan=" + String(diagScanActive ? 1 : 0);
+  head += " fridgeSearch=" + String(fridge.discover.load() ? 1 : 0);
+  head += " dikeySearch=" + String(dikey.discover.load() ? 1 : 0);
+  head += " adv=" + String(adv) + " unique=" + String(count);
+  head += " windowS=" + String((millis() - since) / 1000);
+  head += " scanFail=" + String(scanStartFailures);
+  head += " dikey=" + String(stateName(dikey.state));
+  head += " fridge=" + String(stateName(fridge.state));
+  usbPrint(head);
+  for (size_t i = 0; i < count; ++i) {
+    String line = "FRIDGE SEEN ";
+    line += copy[i].address.toString().c_str();
+    line += " " + String(copy[i].rssi);
+    line += copy[i].connectable ? " C" : " N";
+    line += copy[i].fridgeMatch ? " M " : " - ";
+    line += String(copy[i].hits) + " ";
+    line += copy[i].name[0] ? copy[i].name : "(no name)";
+    usbPrint(line);
+  }
+  usbPrint("FRIDGE DIAG END");
 }
 
 void connectEndpoint(Endpoint &e) {
@@ -287,6 +392,7 @@ void serviceEndpoint(Endpoint &e) {
     if (e.state != State::Scanning) {
       setState(e, State::Scanning);
       e.discover.store(true);
+      scanRestart = true;
     }
     bool pending;
     xSemaphoreTake(discoveryMutex, portMAX_DELAY);
@@ -388,10 +494,22 @@ void handleLine(String line) {
     stopFridge("stopping; waiting for BLE disconnect");
     return;
   }
+  if (line.equalsIgnoreCase("FRIDGE DIAG")) {
+    printDiag();
+    return;
+  }
+  if (line.equalsIgnoreCase("FRIDGE DIAG SCAN")) {
+    clearSeen();
+    diagScanActive = true;
+    diagScanUntil = millis() + kDiagScanMs;
+    scanRestart = true;
+    usbPrint("FRIDGE DIAG SCANNING " + String(kDiagScanMs / 1000));
+    return;
+  }
   String upper = line;
   upper.toUpperCase();
   if (upper.startsWith("FRIDGE")) {
-    usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF or STATUS");
+    usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF, STATUS, DIAG or DIAG SCAN");
     return;
   }
   if (line.equalsIgnoreCase("PING")) { usbPrint("PONG"); return; }
@@ -424,6 +542,7 @@ void setup() {
   const uint32_t start = millis();
   while (!Serial && millis() - start < 2000) delay(10);
   lineBuf.reserve(kMaxLine);
+  seenSinceMs = millis();
   NimBLEDevice::init("ODK-Bridge");
   auto *scan = NimBLEDevice::getScan();
   scan->setScanCallbacks(&scanCallbacks, true);
@@ -467,6 +586,10 @@ void loop() {
   }
   serviceEndpoint(dikey);
   serviceEndpoint(fridge);
+  if (diagScanActive && static_cast<int32_t>(millis() - diagScanUntil) >= 0) {
+    diagScanActive = false;
+    printDiag();
+  }
   refreshScan();
   const uint32_t now = millis();
   if (usbUp && now - lastHbMs >= 8000) {

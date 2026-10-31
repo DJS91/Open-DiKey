@@ -8,5 +8,8 @@
     <string name="bt_diag_bluetooth">Bluetooth settings</string>
     <string name="bt_diag_scan">Run BLE scan (15s)</string>
     <string name="bt_diag_stop">Stop scan</string>
+    <string name="bt_diag_esp_scan">ESP32 scan (15s)</string>
+    <string name="bt_diag_esp_report">ESP32 report</string>
+    <string name="bt_diag_esp_unavailable">ESP32 USB bridge is not open. Connect DiKey via USB first.</string>
     <string name="bt_diag_settings_unavailable">This settings screen is unavailable or blocked by the head unit. See the diagnostic report.</string>
 </resources>

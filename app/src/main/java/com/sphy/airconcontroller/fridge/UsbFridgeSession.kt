@@ -20,6 +20,17 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
     var device = ""
         private set
     val safeForAndroid: Boolean get() = !open || confirmedOff
+    /** Last completed ESP32 scan report: header line followed by FRIDGE SEEN lines. */
+    var diagReport: List<String> = emptyList()
+        private set
+    var diagScanning = false
+        private set
+    /** Recent fridge-namespace traffic (excluding RX payloads), newest last. */
+    val events: List<String> get() = eventLog.toList()
+    private val eventLog = ArrayDeque<String>()
+    private val diagBuilding = mutableListOf<String>()
+    private val clock = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
+    private var lastLogged = ""
     private var ready = false
     private var frames = EvakoolProtocol.Frames()
     private var openedAt = 0L
@@ -52,6 +63,10 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         confirmedOff = false
         awaitingState = false
         restarting = false
+        diagScanning = false
+        diagBuilding.clear()
+        if (lastLogged != "closed") record("USB bridge closed")
+        lastLogged = "closed"
         clearReadings()
         message = "USB bridge disconnected. No live fridge readings."
         changed?.invoke()
@@ -80,13 +95,42 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         changed?.invoke()
     }
 
+    /** Read-only ESP32 scan report; [scan] runs a fresh 15 s scan first. Never writes to the fridge. */
+    fun requestDiagnostics(scan: Boolean): Boolean {
+        if (!open) return false
+        val line = if (scan) "FRIDGE DIAG SCAN" else "FRIDGE DIAG"
+        val sent = send(line)
+        record(if (sent) "→ $line" else "→ $line (USB write failed)")
+        if (sent && scan) diagScanning = true
+        changed?.invoke()
+        return sent
+    }
+
     /** Returns true only for the fridge namespace, never DiKey RX/STATE/TX messages. */
     fun onLine(line: String, now: Long): Boolean {
         if (!line.startsWith("FRIDGE ")) return false
         if (!open) return true
         lastEventAt = now
+        if (!line.startsWith("FRIDGE RX ") && !line.startsWith("FRIDGE SEEN ") &&
+            line != "FRIDGE CAP READONLY_V1" && line != lastLogged
+        ) {
+            lastLogged = line
+            record("← $line")
+        }
         try {
             when {
+                line.startsWith("FRIDGE DIAG SCANNING") -> diagScanning = true
+                line.startsWith("FRIDGE DIAG BEGIN") -> {
+                    diagBuilding.clear()
+                    diagBuilding.add(line.removePrefix("FRIDGE DIAG BEGIN ").trim())
+                }
+                line.startsWith("FRIDGE SEEN ") ->
+                    if (diagBuilding.size < 64) diagBuilding.add(line.removePrefix("FRIDGE SEEN "))
+                line == "FRIDGE DIAG END" -> {
+                    diagReport = diagBuilding.toList()
+                    diagBuilding.clear()
+                    diagScanning = false
+                }
                 line == "FRIDGE CAP READONLY_V1" -> {
                     if (!supported) {
                         supported = true
@@ -166,7 +210,13 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
     }
 
     private fun command(line: String) {
+        if (line != "FRIDGE STATUS") record("→ $line")
         if (!send(line)) fail("USB write failed: $line. Reconnect USB and retry.")
+    }
+
+    private fun record(entry: String) {
+        eventLog.addLast("${clock.format(java.util.Date())} $entry")
+        while (eventLog.size > 60) eventLog.removeFirst()
     }
 
     private fun receiveState(value: String, now: Long) {

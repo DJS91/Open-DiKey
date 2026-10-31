@@ -29,6 +29,30 @@ class UsbFridgeSessionTest {
         assertTrue(writes.all { it in setOf("FRIDGE STATUS", "FRIDGE ON", "FRIDGE OFF") })
     }
 
+    @Test fun parsesEsp32ScanReportWithoutChangingFridgeState() {
+        ready()
+        val before = session.message
+        assertTrue(session.requestDiagnostics(scan = true))
+        assertEquals("FRIDGE DIAG SCAN", writes.last())
+        assertTrue(session.diagScanning)
+        assertTrue(session.onLine("FRIDGE DIAG SCANNING 15", 40))
+        assertTrue(session.onLine("FRIDGE DIAG BEGIN scanning=1 adv=2 unique=2", 50))
+        assertTrue(session.onLine("FRIDGE SEEN aa:bb:cc:dd:ee:ff -60 C M 1 DownUnder_1", 51))
+        assertTrue(session.onLine("FRIDGE SEEN 11:22:33:44:55:66 -80 N - 1 (no name)", 52))
+        assertTrue(session.onLine("FRIDGE DIAG END", 53))
+        assertFalse(session.diagScanning)
+        assertEquals(3, session.diagReport.size)
+        assertEquals("scanning=1 adv=2 unique=2", session.diagReport.first())
+        assertEquals(before, session.message)
+        assertTrue(session.events.any { it.endsWith("→ FRIDGE DIAG SCAN") })
+        assertTrue(writes.none { it.startsWith("FRIDGE RX") || it.startsWith("TX") })
+    }
+
+    @Test fun diagnosticsRequireOpenBridge() {
+        assertFalse(session.requestDiagnostics(scan = false))
+        assertTrue(writes.isEmpty())
+    }
+
     @Test fun routesOnlyNamespacedMessages() {
         ready()
         for (line in listOf("RX AABB", "TXOK", "TXERR error", "STATE READY", "HB READY", "ERR unknown")) {

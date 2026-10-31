@@ -22,6 +22,22 @@ Fridge commands (case insensitive):
 | `FRIDGE ON` | Enable discovery and read-only status polling; idempotent |
 | `FRIDGE OFF` | Disconnect/stop only the fridge; DiKey continues |
 | `FRIDGE STATUS` | Report capability and current fridge state |
+| `FRIDGE DIAG` | Report every advertiser the ESP32 has received since the last diagnostic scan (up to 40) |
+| `FRIDGE DIAG SCAN` | Clear the list, keep scanning 15 s (even if nothing else needs it), then report automatically |
+
+Diagnostic output (never connects or writes to any device):
+
+```text
+FRIDGE DIAG SCANNING 15
+FRIDGE DIAG BEGIN scanning=1 diagScan=0 fridgeSearch=1 dikeySearch=0 adv=N unique=N windowS=N scanFail=N dikey=READY fridge=SCANNING
+FRIDGE SEEN <address> <rssi> <C|N connectable> <M fridge match|-> <count> <name>
+FRIDGE DIAG END
+```
+
+The scan's duplicate filter is reset whenever DiKey or the fridge starts
+searching, so a device first seen while it was not wanted is reported again.
+The app shows these results in Debug → Bluetooth / fridge diagnostics →
+ESP32 scan (15s).
 
 The initial USB announcement and `FRIDGE STATUS` include
 `FRIDGE CAP READONLY_V1`. Fridge output is exclusively namespaced:
@@ -84,7 +100,8 @@ python -m platformio run -e c3_super_mini
 ```
 
 The pinned environment uses pioarduino Arduino-ESP32 3.x and NimBLE-Arduino
-2.3.0. `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3` provides capacity for both centrals;
+2.5.0 (2.3.8+ is required: 2.3.0-2.3.7 crash during BLE init on Arduino
+core 3.3.7+, which caused an "Instruction access fault" boot loop). `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3` provides capacity for both centrals;
 a compile-time guard rejects configurations below two. The selected C3 SDK
 provides six controller BLE activities; a second guard requires room for two
 connections plus scanning. Native C3 USB CDC is
@@ -95,10 +112,10 @@ merged image at `0x0` (4 MB DIO flash).
 ### Build verification (2026-10-30)
 
 The normal PlatformIO build succeeded with Arduino-ESP32 3.3.11 / ESP-IDF
-5.5.5, NimBLE-Arduino 2.3.0 and RISC-V GCC 14.2.0. RAM usage was 23,616 /
-327,680 bytes; program usage was 595,087 / 1,310,720 bytes. Esptool confirmed
+5.5.5, NimBLE-Arduino 2.5.0 and RISC-V GCC 14.2.0. RAM usage was 24,032 /
+327,680 bytes; program usage was 593,045 / 1,310,720 bytes. Esptool confirmed
 ESP32-C3, DIO, 4 MB, and valid application checksum and validation hash.
-The 684,336-byte merged image's bootloader, partition table, boot-app marker
+The 683,008-byte merged image's bootloader, partition table, boot-app marker
 and application were checked against their inputs at their flash offsets.
 
 The generated Windows esptool console launcher was denied execution in this
@@ -107,7 +124,7 @@ entrypoint for image conversion and merging and propagates merge failures.
 The platform's additional, optional `firmware.factory.bin` hook still reports
 that launcher restriction; the repository's requested
 `dikey-usb-bridge-c3.bin` is successfully generated and verified instead.
-No SDK sources or system installations were modified. Upstream NimBLE 2.3.0 /
+No SDK sources or system installations were modified. Upstream NimBLE /
 IDF 5.5.5 emits macro-redefinition warnings for MSYS/ACL buffer settings; these
 were not suppressed or patched.
 

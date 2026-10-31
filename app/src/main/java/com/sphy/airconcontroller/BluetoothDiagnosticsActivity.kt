@@ -73,6 +73,8 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
         }
         scanButton.setOnClickListener { startScan() }
         stopButton.setOnClickListener { stopScan("Stopped by user") }
+        findViewById<Button>(R.id.btDiagEspScan).setOnClickListener { espDiagnostics(scan = true) }
+        findViewById<Button>(R.id.btDiagEspReport).setOnClickListener { espDiagnostics(scan = false) }
         findViewById<Button>(R.id.btDiagLocation).setOnClickListener { openSettings(Settings.ACTION_LOCATION_SOURCE_SETTINGS) }
         findViewById<Button>(R.id.btDiagBluetooth).setOnClickListener { openSettings(Settings.ACTION_BLUETOOTH_SETTINGS) }
         findViewById<Button>(R.id.btDiagAppSettings).setOnClickListener {
@@ -101,6 +103,26 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
+        handler.removeCallbacks(espTick)
+        handler.post(espTick)
+    }
+
+    private val usbFridge get() = OpenDiKeyApp.from(this).dikey.usbBridge.fridge
+
+    private val espTick = object : Runnable {
+        override fun run() {
+            render()
+            handler.postDelayed(this, 1_000)
+        }
+    }
+
+    private fun espDiagnostics(scan: Boolean) {
+        if (!usbFridge.requestDiagnostics(scan)) {
+            event("ESP32 diagnostics not sent: USB bridge not open or write failed.")
+            Toast.makeText(this, R.string.bt_diag_esp_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+        event(if (scan) "Requested 15-second ESP32 scan; report arrives automatically." else "Requested ESP32 scan report.")
     }
 
     override fun onStop() {
@@ -313,6 +335,21 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
 
     private fun report(): String = buildString {
         appendLine(checks)
+        val fridge = usbFridge
+        appendLine("ESP32 BRIDGE BLE (USB bridge open: ${fridge.open}; fridge firmware confirmed: ${fridge.supported})")
+        appendLine("ESP32 fridge status now: ${fridge.message.replace('\n', ' ')}")
+        if (fridge.diagScanning) appendLine("ESP32 15-second scan in progress...")
+        if (fridge.diagReport.isEmpty()) {
+            appendLine("No ESP32 scan report yet. Tap ESP32 scan (15s).")
+        } else {
+            appendLine("Summary: ${fridge.diagReport.first()}")
+            appendLine("Seen devices (address RSSI C=connectable/N=not M=fridge match count name):")
+            fridge.diagReport.drop(1).forEach { appendLine("  $it") }
+            if (fridge.diagReport.size == 1) appendLine("  (none - ESP32 received no advertisements)")
+        }
+        appendLine("ESP32 fridge events (newest last):")
+        fridge.events.takeLast(30).forEach { appendLine("  $it") }
+        appendLine()
         appendLine("RAW BLE SCAN EVIDENCE")
         appendLine(evidence.conclusion())
         appendLine("Elapsed: ${elapsed / 1000}s; callbacks: ${evidence.callbacks}; unique devices: ${evidence.uniqueDevices} (capped at 512)")
@@ -330,7 +367,8 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
     }
 
     private fun render() {
-        reportText.text = report()
+        val text = report()
+        if (reportText.text.toString() != text) reportText.text = text
         scanButton.isEnabled = !evidence.running
         stopButton.isEnabled = evidence.running
     }
