@@ -25,6 +25,14 @@ class EvakoolProtocolTest {
         assertThrows(IllegalArgumentException::class.java) { EvakoolProtocol.temperatureCommand(1, -100) }
     }
 
+    @Test fun decodesAndEncodesCompressorMode() {
+        assertFalse(EvakoolProtocol.parseStatus(status).max)
+        assertTrue(EvakoolProtocol.parseStatus(status.dropLast(1) + "2").max)
+        assertTrue(EvakoolProtocol.parseStatus(status.dropLast(1) + "002").max)
+        assertEquals("/SC6/1/001\n", EvakoolProtocol.modeCommand(false))
+        assertEquals("/SC6/1/002\n", EvakoolProtocol.modeCommand(true))
+    }
+
     @Test fun decodesBothTemperaturesAndTargets() {
         val parsed = EvakoolProtocol.parseStatus(status)
         assertTrue(parsed.on)

@@ -208,4 +208,114 @@ class UsbFridgeSessionTest {
         assertTrue(session.message.contains("timed out"))
         assertFalse(session.safeForAndroid)
     }
+
+    private fun readyWithControl() {
+        session.setEnabled(true, 1)
+        session.onOpen(10)
+        session.onLine("FRIDGE CAP CONTROL_V1", 20)
+        session.onLine("FRIDGE STATE READY DownUnder_123 AA:BB:CC:DD:EE:FF", 30)
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 40)
+    }
+
+    @Test fun readOnlyFirmwareRefusesSetpoints() {
+        ready()
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 40)
+        assertNotNull(session.status)
+        assertFalse(session.canControl)
+        assertFalse(session.setTarget(1, 3, 50))
+        assertTrue(writes.none { it.startsWith("FRIDGE SET") })
+        assertTrue(session.targetNote!!.contains("firmware"))
+    }
+
+    @Test fun sendsSetpointAndConfirmsFromStatus() {
+        readyWithControl()
+        assertTrue(session.canControl)
+        assertTrue(session.setTarget(1, 3, 50))
+        assertEquals("FRIDGE SET 1 3", writes.last())
+        assertFalse("one change at a time", session.setTarget(2, -19, 51))
+        assertTrue(session.onLine("FRIDGE SETOK 1 3", 60))
+        assertEquals(UsbFridgeSession.PendingState.SENT, session.pending!!.state)
+        session.onLine("FRIDGE RX ${hex("/SC0/1/0,1,1,+04,-18,+03,-20,2,12.6,1\n")}", 70)
+        assertNull(session.pending)
+        assertEquals(3, session.status!!.leftTarget)
+        assertTrue(session.targetNote!!.contains("confirmed"))
+        assertTrue(session.setTarget(2, -19, 80))
+        assertEquals("FRIDGE SET 2 -19", writes.last())
+    }
+
+    @Test fun setpointErrorsAndTimeoutsClearPending() {
+        readyWithControl()
+        assertTrue(session.setTarget(2, -21, 50))
+        session.onLine("FRIDGE SETERR fridge not ready", 60)
+        assertNull(session.pending)
+        assertTrue(session.targetNote!!.contains("fridge not ready"))
+        assertTrue(session.setTarget(2, -21, 70))
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 5_000)
+        assertNotNull("unchanged target keeps waiting", session.pending)
+        session.tick(15_100)
+        assertNull(session.pending)
+        assertTrue(session.targetNote!!.contains("not confirmed"))
+    }
+
+    @Test fun setpointNeedsLiveStatusAndValidRange() {
+        session.setEnabled(true, 1)
+        session.onOpen(10)
+        session.onLine("FRIDGE CAP CONTROL_V1", 20)
+        session.onLine("FRIDGE STATE READY DownUnder_123 AA:BB:CC:DD:EE:FF", 30)
+        assertFalse(session.setTarget(1, 3, 40))
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 50)
+        assertFalse(session.setTarget(1, 100, 60))
+        assertTrue(writes.none { it.startsWith("FRIDGE SET") })
+        session.onLine("FRIDGE STATE DISCONNECTED", 70)
+        assertFalse(session.setTarget(1, 3, 80))
+    }
+
+    private fun readyWithMode() {
+        session.setEnabled(true, 1)
+        session.onOpen(10)
+        session.onLine("FRIDGE CAP CONTROL_V2", 20)
+        session.onLine("FRIDGE STATE READY DownUnder_123 AA:BB:CC:DD:EE:FF", 30)
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 40)
+    }
+
+    @Test fun controlV1FirmwareRefusesModeButAllowsSetpoints() {
+        readyWithControl()
+        assertTrue(session.canControl)
+        assertFalse(session.canSetMode)
+        assertFalse(session.setMode(true, 50))
+        assertTrue(writes.none { it.startsWith("FRIDGE MODE") })
+        assertTrue(session.targetNote!!.contains("firmware"))
+    }
+
+    @Test fun sendsModeAndConfirmsFromStatus() {
+        readyWithMode()
+        assertTrue(session.canControl)
+        assertTrue(session.canSetMode)
+        assertFalse(session.status!!.max)
+        assertTrue(session.setMode(true, 50))
+        assertEquals("FRIDGE MODE MAX", writes.last())
+        assertFalse("one change at a time", session.setMode(false, 51))
+        assertTrue(session.onLine("FRIDGE MODEOK MAX", 60))
+        assertEquals(true, session.pendingMax)
+        session.onLine("FRIDGE RX ${hex(frame.dropLast(1) + "2\n")}", 70)
+        assertNull(session.pendingMax)
+        assertTrue(session.status!!.max)
+        assertTrue(session.targetNote!!.contains("confirmed"))
+        assertTrue(session.setMode(false, 80))
+        assertEquals("FRIDGE MODE ECO", writes.last())
+    }
+
+    @Test fun modeErrorsAndTimeoutsClearPending() {
+        readyWithMode()
+        assertTrue(session.setMode(true, 50))
+        session.onLine("FRIDGE MODEERR fridge not ready", 60)
+        assertNull(session.pendingMax)
+        assertTrue(session.targetNote!!.contains("fridge not ready"))
+        assertTrue(session.setMode(true, 70))
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 5_000)
+        assertEquals("unchanged mode keeps waiting", true, session.pendingMax)
+        session.tick(15_100)
+        assertNull(session.pendingMax)
+        assertTrue(session.targetNote!!.contains("not confirmed"))
+    }
 }

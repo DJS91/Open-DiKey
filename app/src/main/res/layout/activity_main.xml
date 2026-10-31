@@ -388,6 +388,7 @@
                         android:textColor="@color/text_muted" />
                 </LinearLayout>
 
+                <!-- Hidden (invisible, so the row keeps its spacing) until the fridge first connects; FridgeTile controls it. -->
                 <LinearLayout
                     android:id="@+id/homeFridgeButton"
                     android:layout_width="0dp"
@@ -397,37 +398,32 @@
                     android:background="@drawable/bg_feature_tile"
                     android:clickable="true"
                     android:clipToOutline="true"
+                    android:contentDescription="@string/fridge_title"
                     android:focusable="true"
                     android:gravity="center"
                     android:orientation="vertical"
-                    android:padding="28dp">
+                    android:padding="28dp"
+                    android:visibility="invisible">
 
                     <ImageView
-                        android:layout_width="80dp"
+                        android:layout_width="match_parent"
                         android:layout_height="80dp"
                         android:layout_marginBottom="16dp"
                         android:contentDescription="@null"
                         android:importantForAccessibility="no"
-                        android:src="@drawable/ic_fridge" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_horizontal"
-                        android:text="@string/fridge_title"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold" />
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/evakool_logo" />
 
                     <TextView
                         android:id="@+id/homeFridgeTemperatures"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
                         android:gravity="center_horizontal"
-                        android:text="@string/fridge_no_readings"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        android:textColor="@color/text_primary" />
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/homeFridgeStatus"
@@ -435,11 +431,19 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:gravity="center_horizontal"
-                        android:maxLines="4"
+                        android:maxLines="2"
                         android:ellipsize="end"
-                        android:text="@string/fridge_select_hint"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                         android:textColor="@color/text_muted" />
+
+                    <Button
+                        android:id="@+id/homeFridgeReconnect"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/fridge_reconnect"
+                        android:visibility="gone" />
                 </LinearLayout>
 
                 <Space

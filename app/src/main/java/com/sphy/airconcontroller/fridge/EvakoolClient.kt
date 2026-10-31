@@ -55,6 +55,9 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         private set
     var pending: Pending? = null
         private set
+    /** Compressor mode (true = Max) written and awaiting confirmation. */
+    var pendingMax: Boolean? = null
+        private set
     var scanning = false
         private set
     var lastFrame: String? = null
@@ -80,7 +83,7 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         handler.removeCallbacksAndMessages(null)
         closeGatt()
         status = null
-        pending = null
+        pending = null; pendingMax = null
     }
 
     fun forget() {
@@ -102,7 +105,7 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         handler.removeCallbacks(retry)
         closeGatt()
         status = null
-        pending = null
+        pending = null; pendingMax = null
         connectSaved()
     }
 
@@ -147,6 +150,10 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         targetUnconfirmed = true
         update(R.string.fridge_target_unconfirmed)
     }
+    private val modeTimeout = Runnable {
+        pendingMax = null
+        update(R.string.fridge_mode_unconfirmed)
+    }
     private val quiet = Runnable {
         try {
             frames.finishUnterminated()?.let(::receiveFrame)
@@ -184,6 +191,19 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         update(R.string.fridge_target_pending)
         enqueue(command)
         enqueue(EvakoolProtocol.STATUS_QUERY)
+    }
+
+    fun setMode(max: Boolean) {
+        if (!ready || status == null || pendingMax != null) {
+            update(R.string.fridge_not_ready)
+            return
+        }
+        pendingMax = max
+        handler.removeCallbacks(modeTimeout)
+        handler.postDelayed(modeTimeout, 10_000)
+        enqueue(EvakoolProtocol.modeCommand(max))
+        enqueue(EvakoolProtocol.STATUS_QUERY)
+        changed()
     }
 
     private fun enqueue(command: String) {
@@ -234,7 +254,7 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         Log.d(TAG, "RX: $lastFrame")
         if (frame.startsWith("/SEE/") || frame.startsWith("/SCE/")) {
             status = null
-            pending = null
+            pending = null; pendingMax = null
             handler.removeCallbacks(targetTimeout)
             update(R.string.fridge_fault, frame.take(100))
             return
@@ -242,6 +262,10 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         try {
             val value = EvakoolProtocol.parseStatus(frame)
             status = value
+            if (pendingMax != null && value.max == pendingMax) {
+                pendingMax = null
+                handler.removeCallbacks(modeTimeout)
+            }
             handler.removeCallbacks(statusTimeout)
             handler.postDelayed(statusTimeout, 20_000)
             val target = pending
@@ -270,7 +294,7 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         Log.w(TAG, reason)
         closeGatt()
         status = null
-        pending = null
+        pending = null; pendingMax = null
         message = reason
         changed()
         if (active && !scanning) handler.postDelayed(retry, RETRY_MS)
@@ -396,7 +420,7 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         stopScan()
         closeGatt()
         status = null
-        pending = null
+        pending = null; pendingMax = null
         found.clear()
         devicesChanged?.invoke(emptyList())
         if (!hasPermissions()) return update(R.string.fridge_permission_needed)

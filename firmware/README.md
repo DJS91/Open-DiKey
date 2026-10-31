@@ -19,9 +19,11 @@ Fridge commands (case insensitive):
 
 | Host command | Effect |
 | --- | --- |
-| `FRIDGE ON` | Enable discovery and read-only status polling; idempotent |
+| `FRIDGE ON` | Enable discovery and status polling; idempotent |
 | `FRIDGE OFF` | Disconnect/stop only the fridge; DiKey continues |
 | `FRIDGE STATUS` | Report capability and current fridge state |
+| `FRIDGE SET <1\|2> <temp>` | Write one compartment setpoint (1 = left `/SC3`, 2 = right `/SC5`), whole number -99..99 in the fridge's units; only while READY. Replies `FRIDGE SETOK <c> <temp>` or `FRIDGE SETERR <reason>`, then polls status ~0.4 s later so the host can confirm |
+| `FRIDGE MODE ECO\|MAX` | Write the compressor mode (`/SC6/1/001` Eco, `/SC6/1/002` Max); only while READY. Replies `FRIDGE MODEOK ECO\|MAX` or `FRIDGE MODEERR <reason>`, then polls status ~0.4 s later (status field 9: 2 = Max) |
 | `FRIDGE DIAG` | Report every advertiser the ESP32 has received since the last diagnostic scan (up to 40) |
 | `FRIDGE DIAG SCAN` | Clear the list, keep scanning 15 s (even if nothing else needs it), then report automatically |
 
@@ -40,10 +42,15 @@ The app shows these results in Debug → Bluetooth / fridge diagnostics →
 ESP32 scan (15s).
 
 The initial USB announcement and `FRIDGE STATUS` include
-`FRIDGE CAP READONLY_V1`. Fridge output is exclusively namespaced:
+`FRIDGE CAP CONTROL_V2` (older firmware sent `READONLY_V1` or `CONTROL_V1`; the
+app accepts all three, shows target controls for `CONTROL_V1`/`CONTROL_V2` and
+Eco/Max only for `CONTROL_V2`). The bridge can send only the status query,
+`FRIDGE SET` setpoints and `FRIDGE MODE`; power, battery
+protection and other settings are never written. Fridge output is exclusively
+namespaced:
 
 ```text
-FRIDGE CAP READONLY_V1
+FRIDGE CAP CONTROL_V2
 FRIDGE STATE OFF
 FRIDGE STATE SCANNING
 FRIDGE STATE CONNECTING <detail>
@@ -51,6 +58,10 @@ FRIDGE STATE READY <advertised name> <BLE address>
 FRIDGE STATE DISCONNECTED <reason>
 FRIDGE STATE ERROR <explanation>
 FRIDGE RX <uppercase hex bytes>
+FRIDGE SETOK <1|2> <temp>
+FRIDGE SETERR <reason>
+FRIDGE MODEOK <ECO|MAX>
+FRIDGE MODEERR <reason>
 ```
 
 `ON` also reports capability/state. Errors never emit DiKey `STATE`,
@@ -136,13 +147,13 @@ required on hardware.
 
 Compilation is not a substitute for these checks on an ESP32-C3 and fridge:
 
-1. Boot: observe HELLO, DiKey state and `FRIDGE CAP READONLY_V1` / OFF.
+1. Boot: observe HELLO, DiKey state and `FRIDGE CAP CONTROL_V2` / OFF.
    DiKey connects and accepts existing PING/ID/STATUS/SCAN/TX commands.
 2. Send `FRIDGE STATUS`: capability plus OFF; no fridge BLE connection.
 3. Send `FRIDGE ON` with DiKey already READY. Verify both remain connected,
    named/addressed fridge READY and unchanged uppercase notification fragments.
    Capture BLE traffic to confirm E532 subscription precedes E531 polling and
-   the only fridge command is `/SC0/1/-01\n`.
+   the only unsolicited fridge command is `/SC0/1/-01\n`.
 4. Repeat with fridge first and DiKey appearing later. Disconnect either
    peripheral and verify only that endpoint retries; the other still works.
 5. Stop fridge notifications: ERROR after 20 seconds, retry after five.
@@ -159,3 +170,10 @@ Compilation is not a substitute for these checks on an ESP32-C3 and fridge:
 9. Drop USB or stop sending `FRIDGE STATUS`/`ON` for 35 seconds: only the
    fridge disconnects, with OFF reported after teardown. Reopening USB
    reports OFF until another explicit ON.
+10. `FRIDGE SET 1 3` while READY: SETOK, then the next status shows left
+    target 3 and the fridge display agrees. While OFF/SCANNING, or with
+    `FRIDGE SET 3 1`, `FRIDGE SET 1 abc` or `FRIDGE SET 1 150`, expect SETERR
+    and no BLE write.
+11. `FRIDGE MODE MAX` then `FRIDGE MODE ECO` while READY: MODEOK, the next
+    status field 9 changes (2 = Max) and the fridge display agrees. While not
+    READY, or with `FRIDGE MODE TURBO`, expect MODEERR and no BLE write.

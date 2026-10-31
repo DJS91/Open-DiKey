@@ -17,7 +17,12 @@ object EvakoolProtocol {
         val leftTarget: Int,
         val rightTarget: Int,
         val voltage: String,
+        /** Compressor mode from field 9: the official app shows "2" as Max, anything else as Eco. */
+        val max: Boolean = false,
     )
+
+    /** Compressor mode: /SC6/1/001 = Eco, /SC6/1/002 = Max (from the official app). */
+    fun modeCommand(max: Boolean): String = if (max) "/SC6/1/002\n" else "/SC6/1/001\n"
 
     fun temperatureCommand(compartment: Int, temperature: Int): String {
         require(compartment in 1..2) { "Invalid compartment" }
@@ -50,6 +55,7 @@ object EvakoolProtocol {
             leftTarget = temperature(5),
             rightTarget = temperature(6),
             voltage = fields[8],
+            max = fields[9].toIntOrNull() == 2,
         )
     }
 

@@ -75,6 +75,9 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
         stopButton.setOnClickListener { stopScan("Stopped by user") }
         findViewById<Button>(R.id.btDiagEspScan).setOnClickListener { espDiagnostics(scan = true) }
         findViewById<Button>(R.id.btDiagEspReport).setOnClickListener { espDiagnostics(scan = false) }
+        findViewById<Button>(R.id.btDiagOpenFridge).setOnClickListener {
+            startActivity(android.content.Intent(this, com.sphy.airconcontroller.fridge.FridgeActivity::class.java))
+        }
         findViewById<Button>(R.id.btDiagLocation).setOnClickListener { openSettings(Settings.ACTION_LOCATION_SOURCE_SETTINGS) }
         findViewById<Button>(R.id.btDiagBluetooth).setOnClickListener { openSettings(Settings.ACTION_BLUETOOTH_SETTINGS) }
         findViewById<Button>(R.id.btDiagAppSettings).setOnClickListener {
@@ -344,7 +347,7 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
         appendLine("Last parse error: ${fridge.lastParseError ?: "(none)"}")
         fridge.status?.let {
             appendLine("Parsed: power=${if (it.on) "on" else "off"} left=${it.left} right=${it.right} " +
-                "targets=${it.leftTarget}/${it.rightTarget} ${if (it.celsius) "C" else "F"} voltage=${it.voltage}")
+                "targets=${it.leftTarget}/${it.rightTarget} ${if (it.celsius) "C" else "F"} voltage=${it.voltage} mode=${if (it.max) "MAX" else "ECO"}")
         }
         if (fridge.diagScanning) appendLine("ESP32 15-second scan in progress...")
         if (fridge.diagReport.isEmpty()) {

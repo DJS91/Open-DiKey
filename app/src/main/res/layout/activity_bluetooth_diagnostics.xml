@@ -130,6 +130,11 @@
                     android:layout_weight="1"
                     android:text="@string/bt_diag_esp_report" />
             </LinearLayout>
+            <Button
+                android:id="@+id/btDiagOpenFridge"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/fridge_open_page" />
             <TextView
                 android:id="@+id/btDiagReport"
                 android:layout_width="match_parent"

@@ -232,6 +232,11 @@
       android:parentActivityName=".DebugHubActivity"
       android:theme="@style/Theme.OpenDiKey" />
     <activity
+      android:name=".fridge.FridgeActivity"
+      android:exported="false"
+      android:parentActivityName=".MainActivity"
+      android:theme="@style/Theme.OpenDiKey" />
+    <activity
       android:name=".BluetoothDiagnosticsActivity"
       android:exported="false"
       android:parentActivityName=".DebugHubActivity"

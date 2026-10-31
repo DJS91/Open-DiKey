@@ -1,4 +1,4 @@
-// ESP32-C3 native USB CDC bridge: DiKey control plus opt-in read-only EVAKOOL.
+// ESP32-C3 native USB CDC bridge: DiKey control plus opt-in EVAKOOL status and setpoints.
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <atomic>
@@ -115,7 +115,7 @@ void setState(Endpoint &e, State state, const String &detail = "") {
 }
 
 void printFridgeStatus() {
-  usbPrint("FRIDGE CAP READONLY_V1");
+  usbPrint("FRIDGE CAP CONTROL_V2");
   printState(fridge);
 }
 
@@ -414,12 +414,69 @@ void serviceEndpoint(Endpoint &e) {
   }
   if (now - e.lastPollMs >= kPollMs) {
     e.lastPollMs = now;
-    // This is the ONLY fridge write path: fixed read-only status request.
+    // Fixed status request. The only other fridge write is handleFridgeSet().
     if (!e.write->writeValue(kStatusPoll, sizeof(kStatusPoll) - 1,
                             !e.write->canWriteNoResponse())) {
       retry(e, "status poll failed", true);
     }
   }
+}
+
+bool fridgeWritable() {
+  return fridge.enabled && fridge.state == State::Ready && fridge.write != nullptr &&
+         fridge.client != nullptr && fridge.client->isConnected();
+}
+
+bool fridgeWrite(const char *cmd, int len) {
+  if (!fridge.write->writeValue(reinterpret_cast<const uint8_t *>(cmd), len,
+                                !fridge.write->canWriteNoResponse())) {
+    return false;
+  }
+  // Ask for fresh status shortly so the host can confirm the change.
+  fridge.lastPollMs = millis() - kPollMs + 400;
+  return true;
+}
+
+// FRIDGE SET <1|2> <signed integer>: compartment setpoint only (/SC3 left, /SC5 right).
+// FRIDGE MODE ECO|MAX: compressor mode (/SC6). No power or battery-protection commands exist here.
+void handleFridgeSet(const String &args) {
+  String a = args;
+  a.trim();
+  const int space = a.indexOf(' ');
+  if (space < 0) { usbPrint("FRIDGE SETERR usage: FRIDGE SET <1|2> <temperature>"); return; }
+  const String comp = a.substring(0, space);
+  String value = a.substring(space + 1);
+  value.trim();
+  if (comp != "1" && comp != "2") { usbPrint("FRIDGE SETERR compartment must be 1 or 2"); return; }
+  bool valid = value.length() >= 1 && value.length() <= 3;
+  for (unsigned i = 0; valid && i < value.length(); ++i) {
+    const char c = value[i];
+    valid = isdigit(static_cast<unsigned char>(c)) || (i == 0 && (c == '+' || c == '-') && value.length() > 1);
+  }
+  const int temp = valid ? value.toInt() : 1000;
+  if (!valid || temp < -99 || temp > 99) { usbPrint("FRIDGE SETERR temperature must be -99..99"); return; }
+  if (!fridgeWritable()) {
+    usbPrint("FRIDGE SETERR fridge not ready");
+    return;
+  }
+  char cmd[16];
+  const int len = snprintf(cmd, sizeof(cmd), "/SC%c/1/%c%02d\n", comp == "1" ? '3' : '5',
+                           temp < 0 ? '-' : '+', temp < 0 ? -temp : temp);
+  if (!fridgeWrite(cmd, len)) {
+    usbPrint("FRIDGE SETERR BLE write failed");
+    return;
+  }
+  usbPrint("FRIDGE SETOK " + comp + " " + String(temp));
+}
+
+void handleFridgeMode(String mode) {
+  mode.trim();
+  mode.toUpperCase();
+  if (mode != "ECO" && mode != "MAX") { usbPrint("FRIDGE MODEERR usage: FRIDGE MODE ECO|MAX"); return; }
+  if (!fridgeWritable()) { usbPrint("FRIDGE MODEERR fridge not ready"); return; }
+  const char *cmd = mode == "MAX" ? "/SC6/1/002\n" : "/SC6/1/001\n";
+  if (!fridgeWrite(cmd, strlen(cmd))) { usbPrint("FRIDGE MODEERR BLE write failed"); return; }
+  usbPrint("FRIDGE MODEOK " + mode);
 }
 
 int hexVal(char c) {
@@ -508,8 +565,16 @@ void handleLine(String line) {
   }
   String upper = line;
   upper.toUpperCase();
+  if (upper.startsWith("FRIDGE SET ")) {
+    handleFridgeSet(line.substring(11));
+    return;
+  }
+  if (upper.startsWith("FRIDGE MODE ")) {
+    handleFridgeMode(line.substring(12));
+    return;
+  }
   if (upper.startsWith("FRIDGE")) {
-    usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF, STATUS, DIAG or DIAG SCAN");
+    usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF, STATUS, SET, MODE, DIAG or DIAG SCAN");
     return;
   }
   if (line.equalsIgnoreCase("PING")) { usbPrint("PONG"); return; }
