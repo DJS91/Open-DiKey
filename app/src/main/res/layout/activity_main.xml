@@ -347,7 +347,7 @@
                 <LinearLayout
                     android:id="@+id/homePetModeButton"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
                     android:layout_marginEnd="12dp"
                     android:layout_weight="1"
                     android:background="@drawable/bg_feature_tile"
@@ -392,7 +392,7 @@
                 <LinearLayout
                     android:id="@+id/homeFridgeButton"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
                     android:layout_marginEnd="12dp"
                     android:layout_weight="1"
                     android:background="@drawable/bg_feature_tile"
@@ -421,7 +421,7 @@
                         android:gravity="center_horizontal"
                         android:maxLines="1"
                         android:ellipsize="end"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
@@ -431,6 +431,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:gravity="center_horizontal"
+                        android:minLines="2"
                         android:maxLines="2"
                         android:ellipsize="end"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
@@ -462,7 +463,7 @@
                 <LinearLayout
                     android:id="@+id/homeProjectionButton"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@drawable/bg_feature_tile"
                     android:clickable="true"

@@ -318,4 +318,53 @@ class UsbFridgeSessionTest {
         assertNull(session.pendingMax)
         assertTrue(session.targetNote!!.contains("not confirmed"))
     }
+
+    private fun readyWithPower() {
+        session.setEnabled(true, 1)
+        session.onOpen(10)
+        session.onLine("FRIDGE CAP CONTROL_V3", 20)
+        session.onLine("FRIDGE STATE READY DownUnder_123 AA:BB:CC:DD:EE:FF", 30)
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 40)
+    }
+
+    @Test fun olderFirmwareRefusesPower() {
+        readyWithMode()
+        assertTrue(session.canSetMode)
+        assertFalse(session.canSetPower)
+        assertFalse(session.setPower(false, 50))
+        assertTrue(writes.none { it.startsWith("FRIDGE POWER") })
+        assertTrue(session.targetNote!!.contains("firmware"))
+    }
+
+    @Test fun sendsPowerAndConfirmsFromStatus() {
+        readyWithPower()
+        assertTrue(session.canControl)
+        assertTrue(session.canSetMode)
+        assertTrue(session.canSetPower)
+        assertTrue(session.status!!.on)
+        assertTrue(session.setPower(false, 50))
+        assertEquals("FRIDGE POWER OFF", writes.last())
+        assertFalse("one change at a time", session.setPower(true, 51))
+        assertTrue(session.onLine("FRIDGE POWEROK OFF", 60))
+        assertEquals(false, session.pendingOn)
+        session.onLine("FRIDGE RX ${hex(frame.replace("/SC0/1/0,1,", "/SC0/1/0,0,") + "\n")}", 70)
+        assertNull(session.pendingOn)
+        assertFalse(session.status!!.on)
+        assertTrue(session.setPower(true, 80))
+        assertEquals("FRIDGE POWER ON", writes.last())
+    }
+
+    @Test fun powerErrorsAndTimeoutsClearPending() {
+        readyWithPower()
+        assertTrue(session.setPower(false, 50))
+        session.onLine("FRIDGE POWERERR fridge not ready", 60)
+        assertNull(session.pendingOn)
+        assertTrue(session.targetNote!!.contains("fridge not ready"))
+        assertTrue(session.setPower(false, 70))
+        session.onLine("FRIDGE RX ${hex("$frame\n")}", 5_000)
+        assertEquals("unchanged power keeps waiting", false, session.pendingOn)
+        session.tick(15_100)
+        assertNull(session.pendingOn)
+        assertTrue(session.targetNote!!.contains("not confirmed"))
+    }
 }

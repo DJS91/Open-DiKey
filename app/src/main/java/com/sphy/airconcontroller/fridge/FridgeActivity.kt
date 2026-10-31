@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.R
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
@@ -37,6 +38,7 @@ class FridgeActivity : OpenDiKeyActivity() {
     private lateinit var graph: FridgeGraphView
     private lateinit var cards: List<Card>
     private lateinit var modeGroup: MaterialButtonToggleGroup
+    private lateinit var power: SwitchMaterial
     private var renderingMode = false
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("evakool", Context.MODE_PRIVATE) }
@@ -64,6 +66,11 @@ class FridgeActivity : OpenDiKeyActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_fridge)
         controller = OpenDiKeyApp.from(this).fridge
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0)
+        }
         name = findViewById(R.id.fridgeName)
         subtitle = findViewById(R.id.fridgeSubtitle)
         statusText = findViewById(R.id.fridgeStatus)
@@ -93,6 +100,24 @@ class FridgeActivity : OpenDiKeyActivity() {
             if (!checked || renderingMode) return@addOnButtonCheckedListener
             controller.setMode(id == R.id.fridgeModeMax)
             render()
+        }
+        power = findViewById(R.id.fridgePower)
+        power.setOnCheckedChangeListener { _, on ->
+            if (renderingMode) return@setOnCheckedChangeListener
+            if (on) {
+                controller.setPower(true)
+                render()
+            } else {
+                // Switching off can spoil food, so confirm first; cancelling restores the switch.
+                dialog?.dismiss()
+                dialog = AlertDialog.Builder(this)
+                    .setTitle(R.string.fridge_power_off_title)
+                    .setMessage(R.string.fridge_power_off_message)
+                    .setPositiveButton(R.string.fridge_power_off_confirm) { _, _ -> controller.setPower(false) }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setOnDismissListener { dialog = null; render() }
+                    .show()
+            }
         }
         findViewById<Button>(R.id.fridgeReconnect).setOnClickListener { reconnect() }
         findViewById<Button>(R.id.fridgeMore).setOnClickListener { showMore() }
@@ -155,10 +180,7 @@ class FridgeActivity : OpenDiKeyActivity() {
             card.up.isEnabled = enabled
             card.down.isEnabled = enabled
         }
-        info.text = if (status == null) "" else listOf(
-            getString(R.string.fridge_power_state, getString(if (status.on) R.string.fridge_on else R.string.fridge_off)),
-            getString(R.string.fridge_voltage, status.voltage),
-        ).joinToString("\n")
+        info.text = if (status == null) "" else getString(R.string.fridge_voltage, status.voltage)
         renderMode()
         val note = controller.targetNote ?: if (status != null) blocker else null
         targetNote.text = note
@@ -169,6 +191,16 @@ class FridgeActivity : OpenDiKeyActivity() {
     }
 
     private fun renderMode() {
+        val on = controller.displayOn
+        renderingMode = true
+        power.isChecked = on == true
+        renderingMode = false
+        power.text = getString(
+            when (on) { true -> R.string.fridge_on; false -> R.string.fridge_off; null -> R.string.fridge_power_unknown },
+        )
+        power.isEnabled = controller.powerBlocker == null && dialog == null
+        power.alpha = if (controller.pendingOn != null) 0.6f else 1f
+
         val max = controller.displayMax
         val pendingMax = controller.pendingMax
         val blocker = controller.modeBlocker

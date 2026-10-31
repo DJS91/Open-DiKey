@@ -24,6 +24,8 @@ object EvakoolProtocol {
     /** Compressor mode: /SC6/1/001 = Eco, /SC6/1/002 = Max (from the official app). */
     fun modeCommand(max: Boolean): String = if (max) "/SC6/1/002\n" else "/SC6/1/001\n"
 
+    fun powerCommand(on: Boolean): String = if (on) "/SC1/1/001\n" else "/SC1/1/000\n"
+
     fun temperatureCommand(compartment: Int, temperature: Int): String {
         require(compartment in 1..2) { "Invalid compartment" }
         require(temperature in -99..99) { "Temperature must be between -99 and 99" }

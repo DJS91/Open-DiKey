@@ -115,7 +115,7 @@ void setState(Endpoint &e, State state, const String &detail = "") {
 }
 
 void printFridgeStatus() {
-  usbPrint("FRIDGE CAP CONTROL_V2");
+  usbPrint("FRIDGE CAP CONTROL_V3");
   printState(fridge);
 }
 
@@ -438,7 +438,7 @@ bool fridgeWrite(const char *cmd, int len) {
 }
 
 // FRIDGE SET <1|2> <signed integer>: compartment setpoint only (/SC3 left, /SC5 right).
-// FRIDGE MODE ECO|MAX: compressor mode (/SC6). No power or battery-protection commands exist here.
+// FRIDGE MODE ECO|MAX: compressor mode (/SC6). FRIDGE POWER ON|OFF: power (/SC1). Battery protection is never written.
 void handleFridgeSet(const String &args) {
   String a = args;
   a.trim();
@@ -477,6 +477,17 @@ void handleFridgeMode(String mode) {
   const char *cmd = mode == "MAX" ? "/SC6/1/002\n" : "/SC6/1/001\n";
   if (!fridgeWrite(cmd, strlen(cmd))) { usbPrint("FRIDGE MODEERR BLE write failed"); return; }
   usbPrint("FRIDGE MODEOK " + mode);
+}
+
+// FRIDGE POWER ON|OFF: fridge power (/SC1). Distinct from FRIDGE ON/OFF, which only controls the bridge link.
+void handleFridgePower(String power) {
+  power.trim();
+  power.toUpperCase();
+  if (power != "ON" && power != "OFF") { usbPrint("FRIDGE POWERERR usage: FRIDGE POWER ON|OFF"); return; }
+  if (!fridgeWritable()) { usbPrint("FRIDGE POWERERR fridge not ready"); return; }
+  const char *cmd = power == "ON" ? "/SC1/1/001\n" : "/SC1/1/000\n";
+  if (!fridgeWrite(cmd, strlen(cmd))) { usbPrint("FRIDGE POWERERR BLE write failed"); return; }
+  usbPrint("FRIDGE POWEROK " + power);
 }
 
 int hexVal(char c) {
@@ -573,8 +584,12 @@ void handleLine(String line) {
     handleFridgeMode(line.substring(12));
     return;
   }
+  if (upper.startsWith("FRIDGE POWER ")) {
+    handleFridgePower(line.substring(13));
+    return;
+  }
   if (upper.startsWith("FRIDGE")) {
-    usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF, STATUS, SET, MODE, DIAG or DIAG SCAN");
+    usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF, STATUS, SET, MODE, POWER, DIAG or DIAG SCAN");
     return;
   }
   if (line.equalsIgnoreCase("PING")) { usbPrint("PONG"); return; }

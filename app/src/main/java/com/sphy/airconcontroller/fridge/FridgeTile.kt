@@ -1,6 +1,10 @@
 package com.sphy.airconcontroller.fridge
 
 import android.content.Intent
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
@@ -52,10 +56,15 @@ class FridgeTile(private val activity: MainActivity) {
         tile.visibility = if (controller.seenConnected) View.VISIBLE else View.INVISIBLE
         val value = controller.status
         if (value != null) {
-            val unit = if (value.celsius) "C" else "F"
-            temperatures.text = activity.getString(R.string.fridge_tile_temps, value.left, value.right, unit)
+            temperatures.text = temperatureText(value)
             val max = controller.displayMax ?: value.max
-            status.setText(if (max) R.string.fridge_mode_max_label else R.string.fridge_mode_eco_label)
+            status.setText(
+                when {
+                    controller.displayOn == false -> R.string.fridge_tile_off
+                    max -> R.string.fridge_mode_max_label
+                    else -> R.string.fridge_mode_eco_label
+                },
+            )
             reconnect.visibility = View.GONE
         } else {
             temperatures.setText(R.string.fridge_disconnected_tile)
@@ -65,5 +74,25 @@ class FridgeTile(private val activity: MainActivity) {
         tile.contentDescription = listOf(
             activity.getString(R.string.fridge_title), temperatures.text, status.text,
         ).joinToString(", ")
+    }
+
+    /** "L 4°C   R -18°C" with small grey side letters so the temperatures stand out. */
+    private fun temperatureText(value: EvakoolProtocol.Status): CharSequence {
+        val unit = if (value.celsius) "C" else "F"
+        val muted = activity.getColor(R.color.text_muted)
+        val text = SpannableStringBuilder()
+        fun label(letter: String) {
+            val start = text.length
+            text.append(letter)
+            text.setSpan(RelativeSizeSpan(0.6f), start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.setSpan(ForegroundColorSpan(muted), start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.append(' ')
+        }
+        label("L")
+        text.append("${value.left}°$unit")
+        text.append("   ")
+        label("R")
+        text.append("${value.right}°$unit")
+        return text
     }
 }

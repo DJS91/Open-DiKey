@@ -22,6 +22,14 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
     private var note: String? = null
     val client = EvakoolClient(context, ::onChanged)
     val history = FridgeHistory(FridgeHistory.FileStorage(File(context.filesDir, "fridge_history.csv")))
+    private val alerts = FridgeAlerts()
+    private val notifier = FridgeNotifier(context)
+    private val alertTick = object : Runnable {
+        override fun run() {
+            checkAlerts()
+            handler.postDelayed(this, ALERT_TICK_MS)
+        }
+    }
 
     val useUsb: Boolean get() = prefs.getString("transport", "usb") != "android"
 
@@ -78,6 +86,30 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
         notifyListeners()
     }
 
+    /** Power change written but not yet reported back by the fridge (true = on). */
+    val pendingOn: Boolean? get() = if (useUsb) usb.pendingOn else client.pendingOn
+
+    /** Power state to display: in-flight value first, then the fridge's reported state. */
+    val displayOn: Boolean? get() = pendingOn ?: status?.on
+
+    /** Null when power can be switched, otherwise a user-facing reason. */
+    val powerBlocker: String?
+        get() = when {
+            status == null -> context.getString(R.string.fridge_not_ready)
+            useUsb && !usb.canSetPower -> context.getString(R.string.fridge_usb_update_firmware)
+            !useUsb && (!usb.safeForAndroid || !client.ready) -> context.getString(R.string.fridge_not_ready)
+            pendingOn != null -> context.getString(R.string.fridge_power_pending)
+            else -> null
+        }
+
+    fun setPower(on: Boolean) {
+        powerBlocker?.let { note = it; expireNote(); notifyListeners(); return }
+        if (status?.on == on) return
+        note = null
+        if (useUsb) usb.setPower(on, SystemClock.elapsedRealtime()) else client.setPower(on)
+        notifyListeners()
+    }
+
     /** Null when targets can be changed, otherwise a user-facing reason. */
     val controlBlocker: String?
         get() = when {
@@ -90,6 +122,7 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
     init {
         usb.changed = ::onChanged
         usb.setEnabled(useUsb, SystemClock.elapsedRealtime())
+        handler.postDelayed(alertTick, ALERT_TICK_MS)
     }
 
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
@@ -198,7 +231,18 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
             seenConnected = true
             history.record(it, System.currentTimeMillis())
         }
+        checkAlerts()
         notifyListeners()
+    }
+
+    private fun checkAlerts() {
+        // The Android backup only runs while a fridge screen is open, so its absence isn't a disconnect.
+        if (!useUsb && visible == 0) {
+            alerts.pause()
+            return
+        }
+        alerts.update(status, SystemClock.elapsedRealtime(), System.currentTimeMillis())
+            .forEach { notifier.handle(it, name) }
     }
 
     private val clearNote = Runnable {
@@ -218,6 +262,7 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
     companion object {
         private const val SEND_DELAY_MS = 1_200L
         private const val RETRY_MS = 1_000L
+        private const val ALERT_TICK_MS = 15_000L
 
         /** Conservative app-side guard; the fridge model's real limits are not published in the app. */
         fun targetRange(celsius: Boolean): IntRange = if (celsius) -25..20 else -13..68

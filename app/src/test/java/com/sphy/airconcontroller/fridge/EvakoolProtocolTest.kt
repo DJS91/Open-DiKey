@@ -31,6 +31,9 @@ class EvakoolProtocolTest {
         assertTrue(EvakoolProtocol.parseStatus(status.dropLast(1) + "002").max)
         assertEquals("/SC6/1/001\n", EvakoolProtocol.modeCommand(false))
         assertEquals("/SC6/1/002\n", EvakoolProtocol.modeCommand(true))
+        assertEquals("/SC1/1/001\n", EvakoolProtocol.powerCommand(true))
+        assertEquals("/SC1/1/000\n", EvakoolProtocol.powerCommand(false))
+        assertFalse(EvakoolProtocol.parseStatus(status.replace("/SC0/1/0,1,", "/SC0/1/0,0,")).on)
     }
 
     @Test fun decodesBothTemperaturesAndTargets() {

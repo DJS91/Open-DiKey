@@ -11,9 +11,16 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
     /** True when the bridge firmware accepts FRIDGE SET (capability CONTROL_V1 or later). */
     var canControl = false
         private set
-    /** True when the bridge firmware accepts FRIDGE MODE ECO|MAX (capability CONTROL_V2). */
+    /** True when the bridge firmware accepts FRIDGE MODE ECO|MAX (capability CONTROL_V2 or later). */
     var canSetMode = false
         private set
+    /** True when the bridge firmware accepts FRIDGE POWER ON|OFF (capability CONTROL_V3). */
+    var canSetPower = false
+        private set
+    /** Fridge power (true = on) sent and awaiting confirmation. */
+    var pendingOn: Boolean? = null
+        private set
+    private var powerSentAt = 0L
     /** Setpoint sent to the bridge and awaiting confirmation in a status frame. */
     var pending: Pending? = null
         private set
@@ -75,6 +82,7 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         supported = false
         canControl = false
         canSetMode = false
+        canSetPower = false
         targetNote = null
         confirmedOff = false
         clearReadings()
@@ -143,6 +151,34 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         }
         pendingMax = max
         modeSentAt = now
+        targetNote = null
+        changed?.invoke()
+        return true
+    }
+
+    /** Turns the fridge on (true) or off (false); confirmed by status field 1. */
+    fun setPower(on: Boolean, now: Long): Boolean {
+        val reason = when {
+            !open || !supported -> "ESP32 bridge not ready"
+            !canSetPower -> "Update the ESP32 firmware to switch the fridge on/off over USB"
+            !enabled || restarting || !ready || status == null -> "Wait for live fridge readings"
+            pendingOn != null -> "Wait for the previous power change to be confirmed"
+            else -> null
+        }
+        if (reason != null) {
+            targetNote = reason
+            changed?.invoke()
+            return false
+        }
+        val line = "FRIDGE POWER ${if (on) "ON" else "OFF"}"
+        record("→ $line")
+        if (!send(line)) {
+            targetNote = "USB write failed"
+            changed?.invoke()
+            return false
+        }
+        pendingOn = on
+        powerSentAt = now
         targetNote = null
         changed?.invoke()
         return true
@@ -223,9 +259,10 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
                     diagScanning = false
                 }
                 line == "FRIDGE CAP READONLY_V1" || line == "FRIDGE CAP CONTROL_V1" ||
-                    line == "FRIDGE CAP CONTROL_V2" -> {
+                    line == "FRIDGE CAP CONTROL_V2" || line == "FRIDGE CAP CONTROL_V3" -> {
                     canControl = line != "FRIDGE CAP READONLY_V1"
-                    canSetMode = line == "FRIDGE CAP CONTROL_V2"
+                    canSetMode = line == "FRIDGE CAP CONTROL_V2" || line == "FRIDGE CAP CONTROL_V3"
+                    canSetPower = line == "FRIDGE CAP CONTROL_V3"
                     if (!supported) {
                         supported = true
                         applyMode(now)
@@ -242,6 +279,11 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
                 line.startsWith("FRIDGE MODEERR") -> {
                     pendingMax = null
                     targetNote = "Mode not sent: ${line.removePrefix("FRIDGE MODEERR").trim()}"
+                }
+                line.startsWith("FRIDGE POWEROK") -> Unit
+                line.startsWith("FRIDGE POWERERR") -> {
+                    pendingOn = null
+                    targetNote = "Power change not sent: ${line.removePrefix("FRIDGE POWERERR").trim()}"
                 }
                 line.startsWith("FRIDGE STATE ") -> receiveState(line.removePrefix("FRIDGE STATE "), now)
                 line.startsWith("FRIDGE RX ") -> {
@@ -279,6 +321,10 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         if (pendingMax != null && now - modeSentAt >= TARGET_TIMEOUT_MS) {
             targetNote = "${if (pendingMax == true) "Max" else "Eco"} mode not confirmed by fridge. Check the fridge display."
             pendingMax = null
+        }
+        if (pendingOn != null && now - powerSentAt >= TARGET_TIMEOUT_MS) {
+            targetNote = "Power ${if (pendingOn == true) "on" else "off"} not confirmed by fridge. Check the fridge display."
+            pendingOn = null
         }
         when {
             !supported && now - openedAt >= 5_000 ->
@@ -322,7 +368,7 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         commandAt = now
         awaitingState = true
         val turnOn = enabled && !restarting
-        message = if (turnOn) "ESP32 searching for EVAKOOL (read-only)..."
+        message = if (turnOn) "ESP32 searching for EVAKOOL..."
         else if (restarting) "Stopping ESP32 fridge link before reconnecting..."
         else "Waiting for ESP32 fridge OFF before Android BLE..."
         command(if (turnOn) "FRIDGE ON" else "FRIDGE OFF")
@@ -375,7 +421,7 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         if (state == "READY" && detail.isNotBlank()) device = detail
         if (state != "READY" || status == null) message = when (state) {
             "READY" -> "ESP32 connected; waiting for fridge readings."
-            "SCANNING" -> "ESP32 scanning for EVAKOOL (read-only)."
+            "SCANNING" -> "ESP32 scanning for EVAKOOL."
             "CONNECTING" -> "ESP32 connecting to fridge..."
             "DISCONNECTED" -> "ESP32 fridge disconnected; retrying."
             else -> "ESP32 fridge error."
@@ -428,10 +474,17 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
                     record("✓ mode ${if (want) "MAX" else "ECO"} confirmed")
                 }
             }
+            pendingOn?.let { want ->
+                if (status?.on == want) {
+                    pendingOn = null
+                    targetNote = "Fridge turned ${if (want) "on" else "off"}"
+                    record("✓ power ${if (want) "ON" else "OFF"} confirmed")
+                }
+            }
             if (lastParseError != null || rxCount <= 3) record("✓ status parsed: $frame")
             lastParseError = null
-            message = if (status?.on == true) "Live via ESP32 USB - read-only"
-            else "Fridge reports power off (ESP32 USB, read-only)"
+            message = if (status?.on == true) "Live via ESP32 USB"
+            else "Fridge is switched off (ESP32 USB)"
         }
     }
 
@@ -440,6 +493,7 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         status = null
         pending = null
         pendingMax = null
+        pendingOn = null
         lastBytesAt = 0
         frames.clear()
     }
