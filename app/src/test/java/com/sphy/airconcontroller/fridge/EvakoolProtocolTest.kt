@@ -49,6 +49,17 @@ class EvakoolProtocolTest {
         assertTrue(EvakoolProtocol.parseStatus(status.replace(",1,1,", ",001,001,")).on)
     }
 
+    @Test fun formatsVoltageInVolts() {
+        fun voltage(raw: String) = EvakoolProtocol.parseStatus(status.replace("12.6", raw)).voltage
+        assertEquals("13.8", voltage("138"))
+        assertEquals("12.6", voltage("126"))
+        assertEquals("24", voltage("240"))
+        assertEquals("13.8", voltage("13.8"))
+        assertEquals("12.6", voltage("12.60"))
+        assertEquals("0", voltage("0"))
+        assertThrows(IllegalArgumentException::class.java) { voltage("unknown") }
+    }
+
     @Test fun assemblesEveryPossibleNotificationSplit() {
         for (split in 0..status.length) {
             val frames = EvakoolProtocol.Frames()

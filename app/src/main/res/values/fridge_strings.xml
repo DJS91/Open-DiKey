@@ -22,6 +22,7 @@
     <string name="fridge_graph_empty">No history yet. A sample is stored every minute while readings are live.</string>
     <string name="fridge_graph_target">target</string>
     <string name="fridge_voltage">Voltage: %1$s V</string>
+    <string name="fridge_tile_voltage">%1$s V</string>
     <string name="fridge_power_title">Fridge power</string>
     <string name="fridge_on">On</string>
     <string name="fridge_off">Off</string>

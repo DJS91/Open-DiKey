@@ -58,13 +58,14 @@ class FridgeTile(private val activity: MainActivity) {
         if (value != null) {
             temperatures.text = temperatureText(value)
             val max = controller.displayMax ?: value.max
-            status.setText(
+            val mode = activity.getString(
                 when {
                     controller.displayOn == false -> R.string.fridge_tile_off
                     max -> R.string.fridge_mode_max_label
                     else -> R.string.fridge_mode_eco_label
                 },
             )
+            status.text = activity.getString(R.string.fridge_tile_voltage, value.voltage) + "\n" + mode
             reconnect.visibility = View.GONE
             status.visibility = View.VISIBLE
         } else {

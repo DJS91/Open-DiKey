@@ -56,9 +56,16 @@ object EvakoolProtocol {
             right = temperature(4),
             leftTarget = temperature(5),
             rightTarget = temperature(6),
-            voltage = fields[8],
+            voltage = formatVoltage(fields[8]),
             max = fields[9].toIntOrNull() == 2,
         )
+    }
+
+    private fun formatVoltage(raw: String): String {
+        require(raw.matches(Regex("\\d+(?:\\.\\d+)?"))) { "Invalid voltage: $raw" }
+        val value = raw.toBigDecimal()
+        return (if ('.' in raw) value else value.movePointLeft(1))
+            .stripTrailingZeros().toPlainString()
     }
 
     /** Notifications may split a message or contain more than one message. */
