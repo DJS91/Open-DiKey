@@ -90,13 +90,20 @@ class EvakoolProtocolTest {
         frames.clear()
         assertThrows(IllegalArgumentException::class.java) { frames.append(ByteArray(2049) { 65 }) }
         frames.clear()
-        assertThrows(IllegalArgumentException::class.java) { frames.append(byteArrayOf(-1)) }
+        assertTrue(frames.append(byteArrayOf(-1, 0)).isEmpty())
+        assertNull(frames.finishUnterminated())
         for (invalid in listOf(
-            status.replace("+04", "bad"), status.replace(",1,1,", ",1,7,"),
-            status.replace(",1,1,", ",7,1,"), "$status,extra", "/SEE/1/1",
+            status.replace("+04", "bad"), status.replace(",1,1,", ",x,1,"), "/SEE/1/1",
+            status.substringBeforeLast(','),
         )) {
             assertThrows(IllegalArgumentException::class.java) { EvakoolProtocol.parseStatus(invalid) }
         }
+    }
+
+    @Test fun acceptsExtraFieldsAndUnknownUnitsLikeOfficialApp() {
+        assertEquals(4, EvakoolProtocol.parseStatus("$status,extra").left)
+        assertFalse(EvakoolProtocol.parseStatus(status.replace(",1,1,", ",1,7,")).celsius)
+        assertEquals(-18, EvakoolProtocol.parseStatus(status.replace(",-18,", ", -18 ,")).right)
     }
 
     @Test fun matchesOfficialDeviceNames() {

@@ -32,22 +32,19 @@ object EvakoolProtocol {
     }
 
     fun parseStatus(frame: String): Status {
-        val fields = frame.trim().removeSuffix(",").split(',')
-        require(fields.size == 10 && fields[0].startsWith("/SC0/")) { "Invalid status frame" }
+        // Mirror the official app: it consumes the first ten fields and ignores extras.
+        val fields = frame.trim().removeSuffix(",").split(',').map { it.trim() }
+        require(fields.size >= 10 && fields[0].startsWith("/SC0/")) { "Invalid status frame" }
         val power = fields[1].toIntOrNull()
-        val units = fields[2].toIntOrNull()
-        require(power != null && power in 0..1) { "Invalid power status" }
-        require(units != null && units in 1..2) { "Unknown temperature unit: ${fields[2]}" }
-        require(fields[7].matches(Regex("\\d{1,3}"))) { "Invalid battery protection mode" }
-        require(fields[8].matches(Regex("\\d{1,3}(?:\\.\\d{1,2})?"))) { "Invalid battery voltage" }
-        require(fields[9].matches(Regex("\\d{1,3}"))) { "Invalid compressor mode" }
+        require(power != null) { "Invalid power status: ${fields[1]}" }
         fun temperature(index: Int): Int {
-            require(fields[index].matches(Regex("[+-]?\\d{1,3}"))) { "Invalid temperature field $index" }
+            require(fields[index].matches(Regex("[+-]?\\d{1,3}"))) { "Invalid temperature field $index: ${fields[index]}" }
             return fields[index].toInt()
         }
         return Status(
             on = power == 1,
-            celsius = units == 1,
+            // The official app treats "1" as Celsius and anything else as Fahrenheit.
+            celsius = fields[2] == "1",
             left = temperature(3),
             right = temperature(4),
             leftTarget = temperature(5),
@@ -63,10 +60,8 @@ object EvakoolProtocol {
         fun clear() { buffer = "" }
 
         fun append(bytes: ByteArray): List<String> {
-            require(bytes.all { it == 10.toByte() || it == 13.toByte() || it.toInt() in 32..126 }) {
-                "Non-ASCII fridge notification"
-            }
-            buffer += bytes.toString(Charsets.US_ASCII)
+            // Drop padding/NUL and other non-printable bytes rather than the whole notification.
+            buffer += String(bytes.filter { it == 10.toByte() || it.toInt() in 32..126 }.toByteArray(), Charsets.US_ASCII)
             require(buffer.length <= 2048) { "Fridge response exceeded 2048 bytes" }
             val frames = mutableListOf<String>()
             while (buffer.isNotEmpty()) {

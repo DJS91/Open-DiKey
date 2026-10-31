@@ -31,6 +31,13 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
     private val diagBuilding = mutableListOf<String>()
     private val clock = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
     private var lastLogged = ""
+    /** Diagnostics: count and printable form of raw fridge notifications since the link came up. */
+    var rxCount = 0
+        private set
+    var lastRx: String? = null
+        private set
+    var lastParseError: String? = null
+        private set
     private var ready = false
     private var frames = EvakoolProtocol.Frames()
     private var openedAt = 0L
@@ -149,7 +156,10 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
                             hex.substring(index * 2, index * 2 + 2).toInt(16).toByte()
                         }
                         lastBytesAt = now
-                        frames.append(bytes).forEach { receiveFrame(it, now) }
+                        rxCount++
+                        lastRx = printable(bytes)
+                        if (rxCount <= 3) record("← fridge data #$rxCount: $lastRx")
+                        frames.append(bytes).forEach { receiveFrameSafely(it, now) }
                     }
                 }
                 else -> fail("Unknown ESP32 fridge response: $line")
@@ -188,7 +198,9 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
             } catch (e: IllegalArgumentException) {
                 // Incomplete frames may continue in a later notification; never display them.
                 status = null
+                lastParseError = e.message
                 message = "Incomplete fridge response: ${e.message}"
+                record("✗ incomplete/unrecognised response (${e.message})")
             }
         }
         if (supported && now - lastQueryAt >= 10_000) {
@@ -249,6 +261,9 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         else if (!ready) {
             ready = true
             lastStatusAt = now
+            rxCount = 0
+            lastRx = null
+            lastParseError = null
         }
         if (state == "READY" && detail.isNotBlank()) device = detail
         if (state != "READY" || status == null) message = when (state) {
@@ -260,6 +275,28 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         } + if (detail.isBlank()) "" else "\n$detail"
     }
 
+    private fun receiveFrameSafely(frame: String, now: Long) {
+        try {
+            receiveFrame(frame, now)
+        } catch (e: IllegalArgumentException) {
+            lastFrame = frame
+            lastParseError = e.message
+            status = null
+            message = "Unrecognised fridge response: ${e.message}"
+            record("✗ parse failed (${e.message}): $frame")
+        }
+    }
+
+    private fun printable(bytes: ByteArray): String = bytes.joinToString("") { b ->
+        val c = b.toInt() and 255
+        when (c) {
+            10 -> "\\n"
+            13 -> "\\r"
+            in 32..126 -> c.toChar().toString()
+            else -> "<%02X>".format(c)
+        }
+    }.take(240)
+
     private fun receiveFrame(frame: String, now: Long) {
         lastFrame = frame
         if (frame.startsWith("/SEE/") || frame.startsWith("/SCE/")) {
@@ -269,6 +306,8 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
         } else {
             status = EvakoolProtocol.parseStatus(frame)
             lastStatusAt = now
+            if (lastParseError != null || rxCount <= 3) record("✓ status parsed: $frame")
+            lastParseError = null
             message = if (status?.on == true) "Live via ESP32 USB - read-only"
             else "Fridge reports power off (ESP32 USB, read-only)"
         }

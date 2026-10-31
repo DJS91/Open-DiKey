@@ -124,19 +124,37 @@ class UsbFridgeSessionTest {
         assertFalse(session.safeForAndroid)
     }
 
-    @Test fun rejectsMalformedHexInvalidUnitsAndReportsFaults() {
+    @Test fun rejectsMalformedHexAndBadTemperaturesAndReportsFaults() {
         ready()
-        for (hex in listOf("", "F", "GG", "FF", "41".repeat(513))) {
+        for (hex in listOf("", "F", "GG", "41".repeat(513))) {
             session.onLine("FRIDGE RX $hex", 100)
             assertNull(session.status)
             assertTrue(session.message.contains("Invalid fridge response"))
         }
-        session.onLine("FRIDGE RX ${hex("${frame.replace(",1,1,", ",1,7,")}\n")}", 200)
+        session.onLine("FRIDGE RX ${hex("${frame.replace("+04", "bad")}\n")}", 200)
         assertNull(session.status)
-        assertTrue(session.message.contains("Unknown temperature unit"))
+        assertTrue(session.message.contains("Invalid temperature field 3"))
+        assertEquals("Invalid temperature field 3: bad", session.lastParseError)
+        assertTrue(session.events.any { it.contains("parse failed") })
         session.onLine("FRIDGE RX ${hex("$frame\n/SEE/1/2\n")}", 300)
         assertNull(session.status)
         assertTrue(session.message.startsWith("Fridge fault"))
+    }
+
+    @Test fun recordsRawDataAndToleratesPaddingBytes() {
+        ready()
+        val bytes = "$frame\n".toByteArray(Charsets.US_ASCII) + byteArrayOf(0)
+        session.onLine("FRIDGE RX ${bytes.joinToString("") { "%02X".format(it.toInt() and 255) }}", 100)
+        assertEquals(4, session.status?.left)
+        assertEquals(1, session.rxCount)
+        assertEquals("$frame\\n<00>", session.lastRx)
+        assertTrue(session.events.any { it.contains("status parsed") })
+    }
+
+    @Test fun keepsDiagnosticsWhenSecondFrameInBatchIsBad() {
+        ready()
+        session.onLine("FRIDGE RX ${hex("garbage\n$frame\n")}", 100)
+        assertEquals(-18, session.status?.right)
     }
 
     @Test fun usbWriteFailureIsVisible() {

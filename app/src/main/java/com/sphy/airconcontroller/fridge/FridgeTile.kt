@@ -56,7 +56,8 @@ class FridgeTile(private val activity: MainActivity) {
         active = false
         androidStarted = false
         usb.changed = null
-        usb.setEnabled(false, SystemClock.elapsedRealtime())
+        // Keep the ESP32 fridge link up while USB is connected so readings survive
+        // navigating away from home; only the Android BLE backup is foreground-only.
         dialog?.setOnDismissListener(null)
         client.stop()
         dialog?.dismiss()

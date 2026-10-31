@@ -338,6 +338,14 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
         val fridge = usbFridge
         appendLine("ESP32 BRIDGE BLE (USB bridge open: ${fridge.open}; fridge firmware confirmed: ${fridge.supported})")
         appendLine("ESP32 fridge status now: ${fridge.message.replace('\n', ' ')}")
+        appendLine("Fridge notifications received since READY: ${fridge.rxCount}")
+        appendLine("Last raw fridge data: ${fridge.lastRx ?: "(none)"}")
+        appendLine("Last fridge frame: ${fridge.lastFrame ?: "(none)"}")
+        appendLine("Last parse error: ${fridge.lastParseError ?: "(none)"}")
+        fridge.status?.let {
+            appendLine("Parsed: power=${if (it.on) "on" else "off"} left=${it.left} right=${it.right} " +
+                "targets=${it.leftTarget}/${it.rightTarget} ${if (it.celsius) "C" else "F"} voltage=${it.voltage}")
+        }
         if (fridge.diagScanning) appendLine("ESP32 15-second scan in progress...")
         if (fridge.diagReport.isEmpty()) {
             appendLine("No ESP32 scan report yet. Tap ESP32 scan (15s).")
