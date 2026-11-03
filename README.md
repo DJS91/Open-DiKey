@@ -76,7 +76,7 @@ Open DiKey once after each cold boot or deep sleep. A foreground listener then k
 
 **ADAS** — View current driver-assistance settings or save and apply a custom ELKA, LDA, AEB, and DMS profile. Long-press the ADAS tile to configure automatic application when the app starts.
 
-**Sentry** — Install, update, and open the separate [Strike](https://github.com/sp-hy/Strike) sentry app.
+**Sentry** — Install, update, and open the separate [Strike](https://github.com/UnrealSalty/Strike) sentry app.
 
 **Pet Mode** — Keeps the display awake and periodically enforces a configurable climate profile while the vehicle is **READY**. Fan speed, temperature, recirculation, and wind direction can be configured; the previous climate and brightness settings are restored on exit.
 

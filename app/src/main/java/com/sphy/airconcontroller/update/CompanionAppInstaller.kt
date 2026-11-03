@@ -142,10 +142,10 @@ class CompanionAppInstaller(
 }
 
 object CompanionApps {
-    /** Strike — [https://github.com/sp-hy/Strike/releases]. */
+    /** Strike — [https://github.com/UnrealSalty/Strike/releases]. */
     val strike = CompanionAppInstaller(
         packageName = "com.strike",
-        repo = "sp-hy/Strike",
+        repo = "UnrealSalty/Strike",
         cacheName = "sentry.apk",
         apkNameHints = listOf("strike", "sentry", "release", "arm64"),
     )
