@@ -255,6 +255,76 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/bg_feature_tile"
+            android:clipToOutline="true"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_wifi_title"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/settings_wifi_hint"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                android:textColor="@color/text_muted" />
+
+            <EditText
+                android:id="@+id/settingsWifiSsid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/settings_wifi_ssid"
+                android:imeOptions="actionNext"
+                android:inputType="text"
+                android:maxLength="32"
+                android:maxLines="1" />
+
+            <EditText
+                android:id="@+id/settingsWifiPassword"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/settings_wifi_password"
+                android:imeOptions="actionDone"
+                android:inputType="textPassword"
+                android:maxLength="63"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/settingsWifiStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/settings_wifi_status_off"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                android:textColor="@color/text_muted" />
+
+            <Button
+                android:id="@+id/settingsWifiConnectButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/settings_wifi_connect" />
+
+            <Button
+                android:id="@+id/settingsWifiForgetButton"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_wifi_disconnect" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:background="@drawable/bg_feature_tile"
             android:clipToOutline="true"
             android:orientation="vertical"

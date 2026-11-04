@@ -368,6 +368,19 @@ class AppSettings(context: Context) {
             prefs.edit().putBoolean(KEY_ADAS_APPLY_ON_BOOT, value).apply()
         }
 
+    /** ESP32 bridge WiFi credentials; empty SSID means WiFi is not configured. */
+    var wifiSsid: String
+        get() = prefs.getString(KEY_WIFI_SSID, "") ?: ""
+        set(value) {
+            prefs.edit().putString(KEY_WIFI_SSID, value).apply()
+        }
+
+    var wifiPassword: String
+        get() = prefs.getString(KEY_WIFI_PASSWORD, "") ?: ""
+        set(value) {
+            prefs.edit().putString(KEY_WIFI_PASSWORD, value).apply()
+        }
+
     /** Bring the main screen to the front when the head unit starts or wakes. Off until the user opts in. */
     var openAppOnBoot: Boolean
         get() = prefs.getBoolean(KEY_OPEN_APP_ON_BOOT, false)
@@ -580,6 +593,8 @@ class AppSettings(context: Context) {
         private const val KEY_ADAS_CUSTOM_DMS = "adas_custom_dms"
         private const val KEY_ADAS_APPLY_ON_BOOT = "adas_apply_on_boot"
         private const val KEY_OPEN_APP_ON_BOOT = "open_app_on_boot"
+        private const val KEY_WIFI_SSID = "wifi_ssid"
+        private const val KEY_WIFI_PASSWORD = "wifi_password"
         private const val KEY_AUTO_SWITCH_CARPLAY = "auto_switch_carplay"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_THEME_STYLE = "theme_style"

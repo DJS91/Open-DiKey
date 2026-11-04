@@ -1,6 +1,7 @@
 // ESP32-C3 native USB CDC bridge: DiKey control plus opt-in EVAKOOL status and setpoints.
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <WiFi.h>
 #include <atomic>
 #include <ctype.h>
 #include <freertos/FreeRTOS.h>
@@ -24,7 +25,7 @@ constexpr uint32_t kRetryMs = 5000;
 constexpr uint32_t kPollMs = 5000;
 constexpr uint32_t kStatusTimeoutMs = 20000;
 constexpr uint32_t kHostLeaseMs = 35000;
-constexpr size_t kMaxLine = 200;
+constexpr size_t kMaxLine = 256;  // WIFI SET carries hex of a 32-byte SSID + 63-byte password.
 const uint8_t kStatusPoll[] = "/SC0/1/-01\n";
 SemaphoreHandle_t serialMutex;
 SemaphoreHandle_t discoveryMutex;
@@ -521,10 +522,133 @@ void handleTx(const String &hex) {
            "TXOK" : "TXERR gatt write");
 }
 
+enum class WifiState { Off, Connecting, Checking, Connected, Failed };
+constexpr uint32_t kWifiJoinTimeoutMs = 20000;
+constexpr uint32_t kWifiRetryMs = 15000;
+constexpr uint32_t kWifiRecheckMs = 30000;
+constexpr uint32_t kDnsProbeTimeoutMs = 3000;
+WifiState wifiState = WifiState::Off;
+String wifiSsid;
+String wifiPass;
+String wifiDetail;
+uint32_t wifiAt = 0;
+
+const char *wifiStateName(WifiState s) {
+  switch (s) {
+    case WifiState::Connecting: return "CONNECTING";
+    case WifiState::Checking: return "CHECKING";
+    case WifiState::Connected: return "CONNECTED";
+    case WifiState::Failed: return "FAILED";
+    default: return "OFF";
+  }
+}
+
+void printWifi() {
+  String line = String("WIFI STATE ") + wifiStateName(wifiState);
+  if (!wifiDetail.isEmpty()) line += " " + wifiDetail;
+  usbPrint(line);
+}
+
+void setWifiState(WifiState s, const String &detail = "") {
+  const bool changed = s != wifiState || detail != wifiDetail;
+  wifiState = s;
+  wifiDetail = detail;
+  wifiAt = millis();
+  if (changed) printWifi();
+}
+
+// WiFi only counts as connected once a TCP connection to Google DNS succeeds.
+bool googleDnsReachable() {
+  const IPAddress servers[] = {IPAddress(8, 8, 8, 8), IPAddress(8, 8, 4, 4)};
+  for (const auto &ip : servers) {
+    WiFiClient client;
+    if (client.connect(ip, 53, kDnsProbeTimeoutMs)) {
+      client.stop();
+      return true;
+    }
+  }
+  return false;
+}
+
+void wifiBegin() {
+  WiFi.disconnect();
+  WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+  setWifiState(WifiState::Connecting, wifiSsid);
+}
+
+void wifiStop() {
+  wifiSsid = "";
+  wifiPass = "";
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  setWifiState(WifiState::Off);
+}
+
+bool decodeHexString(const String &hex, String &out) {
+  out = "";
+  if (hex.length() % 2 != 0) return false;
+  for (size_t i = 0; i < hex.length(); i += 2) {
+    const int hi = hexVal(hex[i]);
+    const int lo = hexVal(hex[i + 1]);
+    if (hi < 0 || lo < 0) return false;
+    out += static_cast<char>((hi << 4) | lo);
+  }
+  return true;
+}
+
+// WIFI SET <hex ssid> <hex password | ->
+void handleWifiSet(const String &args) {
+  const int sp = args.indexOf(' ');
+  String ssid, pass;
+  const String hexPass = sp < 0 ? "-" : args.substring(sp + 1);
+  if (!decodeHexString(sp < 0 ? args : args.substring(0, sp), ssid) ||
+      (hexPass != "-" && !decodeHexString(hexPass, pass)) ||
+      ssid.isEmpty() || ssid.length() > 32 || pass.length() > 63) {
+    usbPrint("WIFI STATE FAILED invalid credentials");
+    return;
+  }
+  if (ssid == wifiSsid && pass == wifiPass &&
+      wifiState != WifiState::Off && wifiState != WifiState::Failed) {
+    printWifi();
+    return;
+  }
+  wifiSsid = ssid;
+  wifiPass = pass;
+  WiFi.mode(WIFI_STA);
+  wifiBegin();
+}
+
+void serviceWifi() {
+  const uint32_t now = millis();
+  switch (wifiState) {
+    case WifiState::Connecting:
+      if (WiFi.status() == WL_CONNECTED) setWifiState(WifiState::Checking, "testing 8.8.8.8");
+      else if (now - wifiAt >= kWifiJoinTimeoutMs) setWifiState(WifiState::Failed, "could not join network");
+      break;
+    case WifiState::Checking:
+      if (googleDnsReachable()) setWifiState(WifiState::Connected, wifiSsid);
+      else setWifiState(WifiState::Failed, "no internet (Google DNS unreachable)");
+      break;
+    case WifiState::Connected:
+      if (now - wifiAt >= kWifiRecheckMs) {
+        if (WiFi.status() != WL_CONNECTED) wifiBegin();
+        else if (!googleDnsReachable()) setWifiState(WifiState::Failed, "no internet (Google DNS unreachable)");
+        else wifiAt = now;
+      }
+      break;
+    case WifiState::Failed:
+      if (!wifiSsid.isEmpty() && now - wifiAt >= kWifiRetryMs) wifiBegin();
+      break;
+    default:
+      break;
+  }
+}
+
 void announceUsb() {
   usbPrint("HELLO ODK-BRIDGE");
   printState(dikey);
   printFridgeStatus();
+  printWifi();
 }
 
 void stopFridge(const char *reason) {
@@ -590,6 +714,13 @@ void handleLine(String line) {
   }
   if (upper.startsWith("FRIDGE")) {
     usbPrint("FRIDGE STATE ERROR unsupported command; use ON, OFF, STATUS, SET, MODE, POWER, DIAG or DIAG SCAN");
+    return;
+  }
+  if (upper.startsWith("WIFI")) {
+    if (upper.startsWith("WIFI SET ")) handleWifiSet(line.substring(9));
+    else if (upper == "WIFI OFF") wifiStop();
+    else if (upper == "WIFI STATUS") printWifi();
+    else usbPrint("WIFI STATE FAILED unsupported command");
     return;
   }
   if (line.equalsIgnoreCase("PING")) { usbPrint("PONG"); return; }
@@ -666,6 +797,7 @@ void loop() {
   }
   serviceEndpoint(dikey);
   serviceEndpoint(fridge);
+  serviceWifi();
   if (diagScanActive && static_cast<int32_t>(millis() - diagScanUntil) >= 0) {
     diagScanActive = false;
     printDiag();

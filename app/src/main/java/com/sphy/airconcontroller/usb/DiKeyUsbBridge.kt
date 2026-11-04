@@ -10,6 +10,10 @@ import com.sphy.airconcontroller.dikey.DiKeyController
 import com.sphy.airconcontroller.dikey.DiKeyFrameSink
 import com.sphy.airconcontroller.dikey.DiKeyProtocol
 import com.sphy.airconcontroller.fridge.UsbFridgeSession
+import com.sphy.airconcontroller.storage.AppSettings
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * USB serial link to firmware/src/DiKeyUsbBridge. The C3 owns DiKey GATT;
@@ -17,8 +21,16 @@ import com.sphy.airconcontroller.fridge.UsbFridgeSession
  */
 class DiKeyUsbBridge(
     usbManager: UsbManager,
-    private val controller: DiKeyController
+    private val controller: DiKeyController,
+    private val settings: AppSettings
 ) : DiKeyFrameSink {
+    enum class WifiState { OFF, CONNECTING, CONNECTED, FAILED }
+
+    data class WifiStatus(val state: WifiState = WifiState.OFF, val detail: String = "")
+
+    private val _wifi = MutableStateFlow(WifiStatus())
+    val wifi: StateFlow<WifiStatus> = _wifi.asStateFlow()
+
     private val main = Handler(Looper.getMainLooper())
     private val writeTimeout = Runnable {
         Log.w(TAG, "TX timeout")
@@ -64,14 +76,47 @@ class DiKeyUsbBridge(
             return err
         }
         serial.writeLine("STATUS")
+        sendWifiConfig()
         fridge.onOpen(SystemClock.elapsedRealtime())
         main.removeCallbacks(fridgeTick)
         main.post(fridgeTick)
         return null
     }
 
+    /** Pushes the saved WiFi credentials (or turns WiFi off when none are saved) to the ESP32. */
+    fun sendWifiConfig() {
+        val ssid = settings.wifiSsid
+        if (ssid.isEmpty()) {
+            if (serial.isOpen) serial.writeLine("WIFI OFF")
+            _wifi.value = WifiStatus()
+            return
+        }
+        val pass = settings.wifiPassword
+        val line = "WIFI SET ${ssid.toHex()} ${if (pass.isEmpty()) "-" else pass.toHex()}"
+        if (serial.isOpen && serial.writeLine(line)) {
+            _wifi.value = WifiStatus(WifiState.CONNECTING, ssid)
+        } else {
+            _wifi.value = WifiStatus(WifiState.FAILED, "ESP32 not connected over USB")
+        }
+    }
+
+    private fun String.toHex(): String =
+        toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+
+    private fun handleWifiLine(line: String) {
+        val parts = line.removePrefix("WIFI STATE ").split(' ', limit = 2)
+        val detail = parts.getOrElse(1) { "" }
+        _wifi.value = when (parts[0]) {
+            "CONNECTED" -> WifiStatus(WifiState.CONNECTED, detail)
+            "CONNECTING", "CHECKING" -> WifiStatus(WifiState.CONNECTING, detail)
+            "FAILED" -> WifiStatus(WifiState.FAILED, detail)
+            else -> WifiStatus()
+        }
+    }
+
     fun close() {
         dikeyReady = false
+        _wifi.value = WifiStatus()
         main.removeCallbacks(writeTimeout)
         main.removeCallbacks(fridgeTick)
         serial.close()
@@ -97,6 +142,11 @@ class DiKeyUsbBridge(
         }
         if (line.startsWith("HELLO ODK-BRIDGE")) {
             fridge.onOpen(SystemClock.elapsedRealtime())
+            sendWifiConfig()
+        }
+        if (line.startsWith("WIFI STATE ")) {
+            handleWifiLine(line)
+            return
         }
         when {
             line.startsWith("RX ", ignoreCase = true) -> {

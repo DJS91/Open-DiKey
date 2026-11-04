@@ -4,10 +4,14 @@ import android.content.ActivityNotFoundException
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.sphy.airconcontroller.usb.DiKeyUsbBridge
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -59,6 +63,50 @@ class SettingsHubActivity : OpenDiKeyActivity() {
         }
         setUpThemeToggle(settings)
         setUpStyleToggle(settings)
+        setUpWifi(settings)
+    }
+
+    private fun setUpWifi(settings: AppSettings) {
+        val bridge = OpenDiKeyApp.from(this).dikey.usbBridge
+        val ssidInput = findViewById<EditText>(R.id.settingsWifiSsid)
+        val passInput = findViewById<EditText>(R.id.settingsWifiPassword)
+        val wifiStatus = findViewById<TextView>(R.id.settingsWifiStatus)
+        ssidInput.setText(settings.wifiSsid)
+        passInput.setText(settings.wifiPassword)
+
+        findViewById<Button>(R.id.settingsWifiConnectButton).setOnClickListener {
+            val ssid = ssidInput.text.toString().trim()
+            if (ssid.isEmpty()) {
+                ssidInput.error = getString(R.string.settings_wifi_ssid)
+                return@setOnClickListener
+            }
+            settings.wifiSsid = ssid
+            settings.wifiPassword = passInput.text.toString()
+            bridge.sendWifiConfig()
+        }
+        findViewById<Button>(R.id.settingsWifiForgetButton).setOnClickListener {
+            settings.wifiSsid = ""
+            settings.wifiPassword = ""
+            ssidInput.setText("")
+            passInput.setText("")
+            bridge.sendWifiConfig()
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                bridge.wifi.collect { wifi ->
+                    wifiStatus.text = when (wifi.state) {
+                        DiKeyUsbBridge.WifiState.OFF -> getString(R.string.settings_wifi_status_off)
+                        DiKeyUsbBridge.WifiState.CONNECTING ->
+                            getString(R.string.settings_wifi_status_connecting, settings.wifiSsid)
+                        DiKeyUsbBridge.WifiState.CONNECTED ->
+                            getString(R.string.settings_wifi_status_connected, wifi.detail)
+                        DiKeyUsbBridge.WifiState.FAILED ->
+                            getString(R.string.settings_wifi_status_failed, wifi.detail)
+                    }
+                }
+            }
+        }
     }
 
     private fun setUpStyleToggle(settings: AppSettings) {

@@ -28,6 +28,17 @@
   <string name="settings_version_fmt">Installed: %1$s</string>
   <string name="settings_updates_idle">Check GitHub for a newer Open DiKey build.</string>
   <string name="settings_check_updates">Check for updates</string>
+  <string name="wifi_state_connected">Wifi Connected</string>
+  <string name="settings_wifi_title">ESP32 WiFi</string>
+  <string name="settings_wifi_hint">The ESP32 joins this network and confirms internet access by reaching Google DNS (8.8.8.8) before reporting Wifi Connected.</string>
+  <string name="settings_wifi_ssid">Network name (SSID)</string>
+  <string name="settings_wifi_password">Password</string>
+  <string name="settings_wifi_connect">Save &amp; connect</string>
+  <string name="settings_wifi_disconnect">Forget network</string>
+  <string name="settings_wifi_status_off">Not configured</string>
+  <string name="settings_wifi_status_connecting">Connecting to %1$s…</string>
+  <string name="settings_wifi_status_connected">Connected to %1$s</string>
+  <string name="settings_wifi_status_failed">Failed: %1$s</string>
   <string name="settings_updates_checking">Checking GitHub releases…</string>
   <string name="settings_updates_up_to_date">You\'re on the latest release (%1$s).</string>
   <string name="settings_updates_available">Update available: %1$s</string>

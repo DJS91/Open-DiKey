@@ -115,7 +115,7 @@ class DiKeySession(private val app: Context) {
             onLog = { emitLog(it) }
         )
         bleClient = DiKeyBleClient(context = app, controller = controller)
-        usbBridge = DiKeyUsbBridge(usbManager, controller)
+        usbBridge = DiKeyUsbBridge(usbManager, controller, settings)
         bleScanner = BleScanner(
             context = app,
             onDevicesChanged = { devices ->

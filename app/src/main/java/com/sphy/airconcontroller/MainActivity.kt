@@ -25,6 +25,7 @@ import com.sphy.airconcontroller.apps.ProjectionApps
 import com.sphy.airconcontroller.apps.ProjectionAutoSwitch
 import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
+import com.sphy.airconcontroller.usb.DiKeyUsbBridge
 import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
@@ -128,6 +129,16 @@ class MainActivity : OpenDiKeyActivity() {
                 } finally {
                     // Don't leave the pulse running while the screen is stopped.
                     stopDotPulse()
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                session.usbBridge.wifi.collect { wifi ->
+                    findViewById<android.view.View>(R.id.mainWifiRow).visibility =
+                        if (wifi.state == DiKeyUsbBridge.WifiState.CONNECTED) android.view.View.VISIBLE
+                        else android.view.View.GONE
                 }
             }
         }
