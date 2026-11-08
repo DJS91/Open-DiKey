@@ -76,6 +76,7 @@ class DiagnosticsRunner(
             Step("SDK class scan") { sdkClassScan() },
             Step("SDK classes and injection") { sdkClasses() },
             Step("BYD device binding") { deviceBinding() },
+            Step("ADAS API inventory") { adasApiInventory() },
             Step("Climate controller") { climate() },
             Step("AC service probe") { acServiceProbe() },
             Step("Vehicle info") { vehicleInfo() },
@@ -604,6 +605,49 @@ class DiagnosticsRunner(
             "BYD devices bound",
             "$bound/${DEVICE_CLASSES.size}",
         )
+    }
+
+    private fun adasApiInventory() {
+        line("Read-only SDK metadata; no vehicle settings are changed.")
+        for ((label, className) in DEVICE_CLASSES.filter { it.first == "DiPilot" || it.first == "ADAS" }) {
+            line()
+            line("$label ($className):")
+            try {
+                val clazz = Class.forName(className, false, app.classLoader)
+                val methods = clazz.methods
+                    .filter { it.declaringClass.name.contains("bydauto") }
+                    .sortedWith(compareBy({ it.name }, { it.parameterTypes.joinToString { type -> type.name } }))
+                if (methods.isEmpty()) line("  No public SDK methods found.")
+                methods.forEach { method ->
+                    val params = method.parameterTypes.joinToString(", ") { it.name }
+                    line("  ${method.returnType.name} ${method.name}($params)")
+                }
+                val classes = listOf(clazz) + clazz.declaredClasses
+                classes.forEach { type ->
+                    type.fields.filter { field ->
+                        java.lang.reflect.Modifier.isStatic(field.modifiers) &&
+                            java.lang.reflect.Modifier.isFinal(field.modifiers) &&
+                            field.type == Int::class.javaPrimitiveType &&
+                            ADAS_CONSTANT_PATTERN.containsMatchIn(field.name)
+                    }.sortedBy { it.name }.forEach { field ->
+                        val value = try {
+                            field.getInt(null).toString()
+                        } catch (e: ReflectiveOperationException) {
+                            "unavailable (${e.javaClass.simpleName})"
+                        } catch (e: SecurityException) {
+                            "unavailable (${e.javaClass.simpleName})"
+                        }
+                        line("  constant ${type.name}.${field.name} = $value")
+                    }
+                }
+            } catch (e: ClassNotFoundException) {
+                line("  Class unavailable: ${e.message}")
+            } catch (e: LinkageError) {
+                line("  SDK metadata unavailable: ${e.message}")
+            } catch (e: SecurityException) {
+                line("  SDK metadata inaccessible: ${e.message}")
+            }
+        }
     }
 
     private fun acGetters(device: Any) {
@@ -1183,6 +1227,8 @@ class DiagnosticsRunner(
         private const val MAX_BLE = 40
         private const val SCAN_CHUNK = 64 * 1024
         private val DEX_ENTRY = Regex("classes\\d*\\.dex")
+        private val ADAS_CONSTANT_PATTERN =
+            Regex("collision|fcw|forward|brake|aeb|warn|crash|distance|risk", RegexOption.IGNORE_CASE)
 
         private val CORE_PERMISSIONS = listOf(
             "android.permission.WRITE_SECURE_SETTINGS",
