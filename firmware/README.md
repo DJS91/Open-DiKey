@@ -102,6 +102,61 @@ recent diagnostic lines in **Debug → ESP32 WiFi diagnostics**, and includes
 them in the diagnostics report. Passwords are not included in these lines;
 SSID and password are sent as hex over USB, not encrypted.
 
+## HTTPS telemetry transport
+
+This is a transport only: the host chooses the webhook, builds the JSON and
+schedules uploads. Commands are case-sensitive, ASCII, LF-terminated, and
+fit the existing 256-character input limit (excluding CR/LF). Responses can be
+interleaved with BLE, WiFi and heartbeat lines. Use a fresh ID for every
+attempt, including retries: 1–16 ASCII letters, digits, `_` or `-`. The host
+must correlate replies by ID; the bridge does not remember past IDs.
+
+1. Send `TELEMETRY BEGIN <id> <url_bytes> <json_bytes>` with decimal byte
+   lengths: URL 1–1024 bytes and JSON 1–8192 bytes. Wait for
+   `TELEMETRY ACK <id> BEGIN`.
+2. Concatenate the URL bytes and UTF-8 JSON bytes, in that order. Send
+   `TELEMETRY DATA <id> <hex>` containing 1–96 bytes per line (two hex digits
+   per byte, no spaces). Wait for `TELEMETRY ACK <id> DATA` before sending
+   the next chunk. A chunk may cross the URL/JSON boundary.
+3. After exactly the declared total, send `TELEMETRY END <id>` and wait for
+   `TELEMETRY ACK <id> END`. The asynchronous terminal response is
+   `TELEMETRY RESULT <id> OK <httpcode>` for a 2xx status or
+   `TELEMETRY RESULT <id> ERROR <reason>`. No response body is returned.
+
+Only one transfer or HTTPS request can be in flight. `BEGIN` requires
+`WIFI STATE CONNECTED`; concurrent requests receive `ERROR BUSY`. The
+receiver aborts after 30 seconds without an accepted BEGIN/DATA, on malformed
+data, length mismatch, an overlong telemetry line, or USB disconnect while
+receiving. The timeout is serviced by the main loop, so existing BLE/WiFi
+operations can delay it. Invalid or missing IDs are reported as `-`.
+An invalid command for the active ID aborts that transfer; a wrong ID does
+not. An already-started HTTPS request continues on USB disconnect, and its
+result can be lost. There is no cancel, replay detection, chunk sequence number
+or retransmission: if an ACK is lost, do not resend a chunk; abandon the
+attempt, wait for the timeout/terminal result and start with a new ID. USB is
+not encrypted. Do not log either host commands or their decoded URL/payload.
+
+Reasons are `FORMAT`, `UNAVAILABLE`, `WIFI`, `BUSY`, `NO_TRANSFER`, `DATA`,
+`BAD_URL`, `LENGTH`, `LINE_TOO_LONG`, `TIMEOUT`, `TIME`, `CONNECT`, `WRITE`,
+`RESPONSE`, or `HTTP_<status>`. A terminal error after END can be ambiguous:
+the server may have received the POST even if its response was lost. Retrying
+can therefore duplicate a webhook event. The firmware does not validate JSON.
+
+URLs must be ASCII `https://` with a DNS hostname or IPv4 address, optional
+decimal port, and optional path/query. IPv6 literals, credentials, fragments,
+spaces, control characters, non-ASCII and backslashes are rejected. URL
+components needing those characters must be percent-encoded. The worker sends
+one `POST` with `Content-Type: application/json`, a content length and
+`Connection: close`; it does not follow redirects or read the response body.
+It uses the embedded ESP-IDF trusted certificate bundle with hostname
+verification, never insecure TLS. When its clock predates 2024 it requests
+NTP from `pool.ntp.org` / `time.google.com` for up to 15 seconds; failure is
+`TIME`. TCP/TLS and response reads have 10-second operation timeouts, though
+DNS/platform network operations do not provide a strict overall deadline.
+The HTTP worker runs separately from the serial/BLE loop, with a single
+bounded URL and payload buffer. WiFi loss can still interrupt a request, and
+BLE/WiFi radio coexistence and TLS heap availability need hardware testing.
+
 ## Discovery and read-only operation
 
 Matches are case-insensitive names containing `downunder_`, names containing
@@ -151,7 +206,28 @@ enabled. The repository post-build script merges bootloader, partition table,
 boot-app marker and application into `dikey-usb-bridge-c3.bin`. Flash that
 merged image at `0x0` (4 MB DIO flash).
 
-### Build verification (2026-10-30)
+Telemetry uses `min_spiffs.csv`: two 0x1E0000-byte app slots and 0x20000
+bytes of SPIFFS, instead of the previous 0x140000-byte app slots and larger
+SPIFFS. NVS and OTA metadata retain their offsets, but app/SPIFFS offsets
+change. **Flash the complete merged image at 0x0**, not just the application;
+back up any flash data first. Flashing the merged image also erases/writes its
+covered NVS and OTA-metadata sectors; existing settings may be lost even
+though those offsets are unchanged. Existing SPIFFS contents and an old OTA
+image must be considered incompatible/lost. This firmware does not use SPIFFS
+or provide an OTA update workflow.
+
+### Telemetry build verification (2026-11-08)
+
+The normal `c3_super_mini` build succeeded with Arduino-ESP32 3.3.11 and
+NimBLE-Arduino 2.5.0. PlatformIO reports 57,672 / 327,680 bytes static RAM
+and 1,381,977 / 1,966,080 bytes program usage. The linked ELF contains the
+certificate bundle and attach routine. The generated 1,482,752-byte merged
+image identifies as ESP32-C3, 4 MB DIO; its bootloader, partition table,
+boot-app marker and application were compared byte-for-byte at their flash
+offsets. The partition table and maximum DATA line length were also checked.
+No actual device, HTTPS endpoint, TLS failure or USB transfer was tested.
+
+### Previous build verification (2026-10-30; before telemetry)
 
 The normal PlatformIO build succeeded with Arduino-ESP32 3.3.11 / ESP-IDF
 5.5.5, NimBLE-Arduino 2.5.0 and RISC-V GCC 14.2.0. RAM usage was 24,032 /
@@ -211,3 +287,11 @@ Compilation is not a substitute for these checks on an ESP32-C3 and fridge:
 12. `FRIDGE POWER OFF` then `FRIDGE POWER ON` while READY: POWEROK, status
     field 1 follows, the fridge display agrees and the BLE link stays up while
     the fridge is off. `FRIDGE POWER MAYBE` gives POWERERR and no BLE write.
+13. With WiFi and both BLE links active, send a multi-chunk telemetry POST and
+    verify every ACK, exact server-received bytes and 2xx RESULT. Interleave
+    PING and BLE notifications while DNS, NTP, TLS and the server are slow.
+14. Exercise invalid hex/length/ID, overlong line, missing DATA/END timeout,
+    disconnect during transfer and request, BUSY, no WiFi, unreachable NTP,
+    untrusted/expired/mismatched certificate, redirect, non-2xx, stalled
+    response and WiFi loss. Confirm no secrets in serial output or logs,
+    and observe BLE links and heap stability over repeated requests.

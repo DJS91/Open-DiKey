@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.launch
 
@@ -54,6 +55,34 @@ class DebugHubActivity : OpenDiKeyActivity() {
             }
         }
         if (bridge.isUsbOpen) bridge.requestWifiStatus()
+        val uploadButton = findViewById<Button>(R.id.sendDiagnosticStorageButton)
+        val uploadStatus = findViewById<android.widget.TextView>(R.id.diagStorageStatus)
+        val upload = OpenDiKeyApp.from(this).diagnosticUpload
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                upload.state.collect { state ->
+                    uploadButton.isEnabled = !state.busy
+                    val text = when {
+                        state.url != null -> getString(R.string.diag_storage_done, state.url)
+                        state.error != null -> getString(R.string.diag_storage_failed, state.error)
+                        state.busy -> state.progress ?: getString(R.string.diag_storage_uploading)
+                        else -> ""
+                    }
+                    uploadStatus.text = text
+                    uploadStatus.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+        }
+        uploadButton.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.diag_storage_confirm_title)
+                .setMessage(R.string.diag_storage_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.diag_storage_send) { _, _ ->
+                    upload.start()
+                }
+                .show()
+        }
         findViewById<android.view.View>(R.id.openDiagnosticsButton).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }

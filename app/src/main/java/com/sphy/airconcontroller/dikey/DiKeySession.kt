@@ -86,6 +86,7 @@ class DiKeySession(private val app: Context) {
             }
         },
         onEvent = { event ->
+            com.sphy.airconcontroller.diagnostics.DebugTrace.dikey("event $event")
             persistDialFromEvent(event)
             _events.tryEmit(event)
             climateMapper.handle(event)
@@ -445,6 +446,7 @@ class DiKeySession(private val app: Context) {
     }
 
     private fun emitLog(line: String) {
+        com.sphy.airconcontroller.diagnostics.DebugTrace.dikey(line)
         _logs.tryEmit(line)
     }
 

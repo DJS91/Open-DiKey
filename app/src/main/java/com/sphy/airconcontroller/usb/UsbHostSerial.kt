@@ -109,7 +109,11 @@ class UsbHostSerial(
         val written = synchronized(writeLock) {
             conn.bulkTransfer(out, payload, payload.size, WRITE_TIMEOUT_MS)
         }
-        return written == payload.size
+        val success = written == payload.size
+        com.sphy.airconcontroller.diagnostics.DebugTrace.usb(
+            "${if (success) "TX" else "TX failed"} $line",
+        )
+        return success
     }
 
     fun close() {
@@ -147,6 +151,7 @@ class UsbHostSerial(
                     acc.delete(0, nl + 1)
                     if (raw.isNotEmpty()) {
                         val line = raw
+                        com.sphy.airconcontroller.diagnostics.DebugTrace.usb("RX $line")
                         main.post {
                             if (running && generation == openedGeneration) onLine(line)
                         }

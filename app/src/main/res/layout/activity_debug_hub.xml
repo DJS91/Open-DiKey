@@ -102,6 +102,22 @@
             android:layout_marginBottom="12dp"
             android:text="@string/bt_diag_title" />
 
+        <Button
+            android:id="@+id/sendDiagnosticStorageButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="@string/diag_storage_send" />
+
+        <TextView
+            android:id="@+id/diagStorageStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:textColor="@color/text_primary"
+            android:textIsSelectable="true"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/openDiagnosticsButton"
             android:layout_width="match_parent"

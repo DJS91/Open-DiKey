@@ -1,6 +1,7 @@
 package com.sphy.airconcontroller
 
 import android.content.ActivityNotFoundException
+import android.Manifest
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -11,6 +12,7 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.activity.result.contract.ActivityResultContracts
 import com.sphy.airconcontroller.usb.DiKeyUsbBridge
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -19,6 +21,7 @@ import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.storage.ThemeMode
 import com.sphy.airconcontroller.storage.ThemeStyle
+import com.sphy.airconcontroller.telemetry.TelemetryConfig
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.ui.ThemeManager
 import com.sphy.airconcontroller.update.AppUpdater
@@ -28,6 +31,14 @@ import kotlinx.coroutines.withContext
 
 /** App settings hub. */
 class SettingsHubActivity : OpenDiKeyActivity() {
+    private val requestTelemetryLocation = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { permissions ->
+        if (permissions.values.none { it }) {
+            Toast.makeText(this, R.string.telemetry_location_denied, Toast.LENGTH_LONG).show()
+        }
+        OpenDiKeyApp.from(this).telemetry.reconfigure()
+    }
     private lateinit var versionText: TextView
     private lateinit var statusText: TextView
     private lateinit var progress: ProgressBar
@@ -64,6 +75,45 @@ class SettingsHubActivity : OpenDiKeyActivity() {
         setUpThemeToggle(settings)
         setUpStyleToggle(settings)
         setUpWifi(settings)
+        setUpTelemetry(settings)
+    }
+
+    private fun setUpTelemetry(settings: AppSettings) {
+        val url = findViewById<EditText>(R.id.telemetryUrl)
+        val interval = findViewById<EditText>(R.id.telemetryInterval)
+        val location = findViewById<SwitchMaterial>(R.id.telemetryLocation)
+        val enabled = findViewById<SwitchMaterial>(R.id.telemetryEnabled)
+        val status = findViewById<TextView>(R.id.telemetryStatus)
+        val sender = OpenDiKeyApp.from(this).telemetry
+        url.setText(settings.telemetryUrl)
+        interval.setText(settings.telemetryIntervalSeconds.toString())
+        location.isChecked = settings.telemetryLocationEnabled
+        enabled.isChecked = settings.telemetryEnabled
+
+        findViewById<Button>(R.id.telemetrySave).setOnClickListener {
+            val newUrl = url.text.toString().trim()
+            val seconds = interval.text.toString().toIntOrNull()
+            if (enabled.isChecked && !TelemetryConfig.validUrl(newUrl)) {
+                url.error = getString(R.string.telemetry_invalid_url)
+                return@setOnClickListener
+            }
+            if (seconds == null || seconds !in 5..3600) {
+                interval.error = getString(R.string.telemetry_invalid_interval)
+                return@setOnClickListener
+            }
+            settings.saveTelemetry(enabled.isChecked, newUrl, seconds, location.isChecked)
+            sender.reconfigure()
+            if (enabled.isChecked && location.isChecked) {
+                requestTelemetryLocation.launch(arrayOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION,
+                ))
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                sender.status.collect { status.text = it }
+            }
+        }
     }
 
     private fun setUpWifi(settings: AppSettings) {

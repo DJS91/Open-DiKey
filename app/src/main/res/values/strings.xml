@@ -1,4 +1,15 @@
 <resources>
+    <string name="telemetry_title">Home Assistant telemetry</string>
+    <string name="telemetry_hint">Sends vehicle, ADAS and climate readings, including VIN and optional location, through the ESP32. The webhook URL may contain a secret; anyone with it may submit data.</string>
+    <string name="telemetry_url">HTTPS webhook URL</string>
+    <string name="telemetry_interval">Interval in seconds (5–3600)</string>
+    <string name="telemetry_location">Include last known location when permitted</string>
+    <string name="telemetry_enable">Enable periodic telemetry</string>
+    <string name="telemetry_save">Save telemetry settings</string>
+    <string name="telemetry_disabled">Telemetry disabled</string>
+    <string name="telemetry_invalid_url">Enter a valid publicly trusted HTTPS URL (maximum 512 UTF-8 bytes).</string>
+    <string name="telemetry_invalid_interval">Enter an interval between 5 and 3600 seconds.</string>
+    <string name="telemetry_location_denied">Location permission not granted; location will be unavailable.</string>
   <string name="app_name">Open DiKey</string>
   <string name="hub_title">Open DiKey</string>
   <string name="hub_subtitle">ADB setup for vehicle APIs, then open a test menu.</string>
@@ -36,6 +47,12 @@
   <string name="wifi_debug_refresh">Refresh WiFi diagnostics</string>
   <string name="wifi_debug_usb_unavailable">Cannot request diagnostics: the ESP32 USB bridge is not connected.</string>
   <string name="wifi_debug_send_failed">Failed to request diagnostics from the ESP32 over USB.</string>
+  <string name="diag_storage_send">Run and upload diagnostics</string>
+  <string name="diag_storage_confirm_title">Upload diagnostic data?</string>
+  <string name="diag_storage_confirm">This sends a full diagnostic report and recent DiKey and USB logs to the third-party service aisenseapi.com using the head unit’s internet connection. The report may contain vehicle identifiers, device addresses and other sensitive information. Anyone with the returned link can read it; the service says it expires after 24 hours.</string>
+  <string name="diag_storage_uploading">Uploading diagnostic report…</string>
+  <string name="diag_storage_done">Diagnostic report URL (expires after 24 hours):\n%1$s</string>
+  <string name="diag_storage_failed">Diagnostic upload failed: %1$s</string>
   <string name="wifi_scan_button">Scan for networks</string>
   <string name="wifi_scan_initial">Scan for nearby 2.4 GHz networks. Hidden networks are not listed.</string>
   <string name="wifi_scan_running">Scanning for networks…</string>

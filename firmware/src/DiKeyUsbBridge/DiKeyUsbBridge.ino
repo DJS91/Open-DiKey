@@ -2,11 +2,16 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <WiFi.h>
+#include <NetworkClientSecure.h>
 #include <atomic>
 #include <ctype.h>
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <time.h>
+
+extern const uint8_t x509BundleStart[] asm("_binary_x509_crt_bundle_start");
+extern const uint8_t x509BundleEnd[] asm("_binary_x509_crt_bundle_end");
 
 #if CONFIG_BT_NIMBLE_MAX_CONNECTIONS < 2
 #error "DiKey and EVAKOOL require at least two NimBLE central connections"
@@ -794,6 +799,238 @@ void serviceWifi() {
   }
 }
 
+constexpr size_t kTelemetryUrlMax = 1024;
+constexpr size_t kTelemetryJsonMax = 8192;
+constexpr size_t kTelemetryChunkMax = 96;
+constexpr uint32_t kTelemetryIdleMs = 30000;
+enum class TelemetryState { Idle, Receiving, Working };
+std::atomic<TelemetryState> telemetryState{TelemetryState::Idle};
+TaskHandle_t telemetryTask = nullptr;
+char telemetryId[17];
+char telemetryUrl[kTelemetryUrlMax + 1];
+uint8_t telemetryJson[kTelemetryJsonMax];
+size_t telemetryUrlLen, telemetryJsonLen, telemetryReceived;
+uint32_t telemetryLastChunk;
+
+void telemetryError(const char *id, const char *reason) {
+  usbPrint(String("TELEMETRY RESULT ") + id + " ERROR " + reason);
+}
+
+void clearTelemetry() {
+  memset(telemetryUrl, 0, sizeof(telemetryUrl));
+  memset(telemetryJson, 0, sizeof(telemetryJson));
+  telemetryId[0] = '\0';
+  telemetryState.store(TelemetryState::Idle);
+}
+
+bool validTelemetryId(const String &id) {
+  if (id.isEmpty() || id.length() > 16) return false;
+  for (size_t i = 0; i < id.length(); ++i) {
+    char c = id[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') || c == '_' || c == '-')) return false;
+  }
+  return true;
+}
+
+bool telemetrySize(const String &text, size_t max, size_t &value) {
+  if (text.isEmpty() || text.length() > 5) return false;
+  size_t n = 0;
+  for (size_t i = 0; i < text.length(); ++i) {
+    if (text[i] < '0' || text[i] > '9') return false;
+    n = n * 10 + text[i] - '0';
+  }
+  if (n == 0 || n > max) return false;
+  value = n;
+  return true;
+}
+
+// Only DNS names/IPv4, optional port, and an ASCII path/query are accepted.
+bool parseTelemetryUrl(char *host, size_t hostSize, uint16_t &port, const char *&path) {
+  if (strncmp(telemetryUrl, "https://", 8) != 0) return false;
+  const char *authority = telemetryUrl + 8;
+  const char *end = authority;
+  while (*end && *end != '/' && *end != '?') ++end;
+  const char *colon = nullptr;
+  for (const char *p = authority; p < end; ++p) {
+    if (*p == ':') {
+      if (colon) return false;
+      colon = p;
+    } else if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+                 (*p >= '0' && *p <= '9') || *p == '-' || *p == '.')) return false;
+  }
+  const size_t hostLen = (colon ? colon : end) - authority;
+  if (hostLen == 0 || hostLen >= hostSize) return false;
+  memcpy(host, authority, hostLen);
+  host[hostLen] = '\0';
+  port = 443;
+  if (colon) {
+    unsigned n = 0;
+    if (colon + 1 == end) return false;
+    for (const char *p = colon + 1; p < end; ++p) {
+      if (*p < '0' || *p > '9' || n > 6553) return false;
+      n = n * 10 + *p - '0';
+    }
+    if (n == 0 || n > 65535) return false;
+    port = static_cast<uint16_t>(n);
+  }
+  for (const char *p = end; *p; ++p) {
+    if (static_cast<unsigned char>(*p) < 33 || static_cast<unsigned char>(*p) > 126 ||
+        *p == '#' || *p == '\\') return false;
+  }
+  path = end;
+  return true;
+}
+
+bool telemetryWrite(NetworkClientSecure &client, const uint8_t *data, size_t length) {
+  return client.write(data, length) == length;
+}
+
+void telemetryWorker(void *) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    const char *error = nullptr;
+    int status = 0;
+    char host[254];
+    uint16_t port = 443;
+    const char *path = nullptr;
+    if (!parseTelemetryUrl(host, sizeof(host), port, path)) error = "BAD_URL";
+    else if (WiFi.status() != WL_CONNECTED) error = "WIFI";
+    else {
+      if (time(nullptr) < 1704067200) {
+        configTime(0, 0, "pool.ntp.org", "time.google.com");
+        const uint32_t started = millis();
+        while (time(nullptr) < 1704067200 && WiFi.status() == WL_CONNECTED &&
+               millis() - started < 15000) vTaskDelay(pdMS_TO_TICKS(200));
+      }
+      if (WiFi.status() != WL_CONNECTED) error = "WIFI";
+      else if (time(nullptr) < 1704067200) error = "TIME";
+      else {
+        NetworkClientSecure client;
+        client.setCACertBundle(x509BundleStart, x509BundleEnd - x509BundleStart);
+        client.setTimeout(10000);
+        client.setHandshakeTimeout(10);
+        if (!client.connect(host, port, 10000)) error = "CONNECT";
+        else {
+          char header[384];
+          int n = snprintf(header, sizeof(header), " HTTP/1.1\r\nHost: %s:%u\r\n"
+                           "Content-Type: application/json\r\nContent-Length: %u\r\n"
+                           "Connection: close\r\n\r\n", host, port,
+                           static_cast<unsigned>(telemetryJsonLen));
+          const char *prefix = (*path == '/') ? "" : "/";
+          bool sent = n > 0 && static_cast<size_t>(n) < sizeof(header) &&
+                      telemetryWrite(client, reinterpret_cast<const uint8_t *>("POST "), 5) &&
+                      telemetryWrite(client, reinterpret_cast<const uint8_t *>(prefix), strlen(prefix)) &&
+                      telemetryWrite(client, reinterpret_cast<const uint8_t *>(path), strlen(path)) &&
+                      telemetryWrite(client, reinterpret_cast<const uint8_t *>(header), n) &&
+                      telemetryWrite(client, telemetryJson, telemetryJsonLen);
+          if (!sent) error = "WRITE";
+          else {
+            char response[129];
+            size_t used = 0;
+            const uint32_t started = millis();
+            bool complete = false;
+            while (millis() - started < 10000 && used < sizeof(response) - 1) {
+              if (client.available()) {
+                int ch = client.read();
+                if (ch == '\n') { complete = true; break; }
+                if (ch < 32 && ch != '\r') break;
+                response[used++] = static_cast<char>(ch);
+              } else if (!client.connected()) break;
+              else vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            response[used] = '\0';
+            if (!complete || used < 12 ||
+                (strncmp(response, "HTTP/1.1 ", 9) != 0 && strncmp(response, "HTTP/1.0 ", 9) != 0) ||
+                response[9] < '1' || response[9] > '5' ||
+                response[10] < '0' || response[10] > '9' ||
+                response[11] < '0' || response[11] > '9' ||
+                (response[12] != ' ' && response[12] != '\r' && response[12] != '\0')) error = "RESPONSE";
+            else {
+              status = (response[9] - '0') * 100 + (response[10] - '0') * 10 + response[11] - '0';
+              if (status < 200 || status >= 300) error = "HTTP";
+            }
+          }
+        }
+        client.stop();
+      }
+    }
+    char completedId[sizeof(telemetryId)];
+    memcpy(completedId, telemetryId, sizeof(completedId));
+    clearTelemetry();
+    if (error && strcmp(error, "HTTP") == 0)
+      usbPrint(String("TELEMETRY RESULT ") + completedId + " ERROR HTTP_" + status);
+    else if (error) telemetryError(completedId, error);
+    else usbPrint(String("TELEMETRY RESULT ") + completedId + " OK " + status);
+  }
+}
+
+void handleTelemetry(const String &line) {
+  const int first = line.indexOf(' ', 10);
+  if (first < 0) { telemetryError("-", "FORMAT"); return; }
+  const String command = line.substring(10, first);
+  const int second = line.indexOf(' ', first + 1);
+  const String id = line.substring(first + 1, second < 0 ? line.length() : second);
+  if (!validTelemetryId(id)) { telemetryError("-", "FORMAT"); return; }
+  const TelemetryState state = telemetryState.load();
+  if (command == "BEGIN") {
+    if (state != TelemetryState::Idle) { telemetryError(id.c_str(), "BUSY"); return; }
+    if (!telemetryTask) { telemetryError(id.c_str(), "UNAVAILABLE"); return; }
+    if (wifiState != WifiState::Connected || WiFi.status() != WL_CONNECTED) {
+      telemetryError(id.c_str(), "WIFI"); return;
+    }
+    const int third = second < 0 ? -1 : line.indexOf(' ', second + 1);
+    size_t urlLen, jsonLen;
+    if (third < 0 || !telemetrySize(line.substring(second + 1, third), kTelemetryUrlMax, urlLen) ||
+        !telemetrySize(line.substring(third + 1), kTelemetryJsonMax, jsonLen)) {
+      telemetryError(id.c_str(), "FORMAT"); return;
+    }
+    memcpy(telemetryId, id.c_str(), id.length() + 1);
+    telemetryUrlLen = urlLen;
+    telemetryJsonLen = jsonLen;
+    telemetryReceived = 0;
+    telemetryLastChunk = millis();
+    telemetryState.store(TelemetryState::Receiving);
+    usbPrint("TELEMETRY ACK " + id + " BEGIN");
+    return;
+  }
+  if (state != TelemetryState::Receiving || id != telemetryId) {
+    telemetryError(id.c_str(), state == TelemetryState::Working ? "BUSY" : "NO_TRANSFER");
+    return;
+  }
+  if (command == "DATA" && second >= 0) {
+    const String hex = line.substring(second + 1);
+    const size_t bytes = hex.length() / 2;
+    if (hex.isEmpty() || hex.length() % 2 || bytes > kTelemetryChunkMax ||
+        bytes > telemetryUrlLen + telemetryJsonLen - telemetryReceived) {
+      telemetryError(id.c_str(), "DATA"); clearTelemetry(); return;
+    }
+    for (size_t i = 0; i < bytes; ++i) {
+      int hi = hexVal(hex[i * 2]), lo = hexVal(hex[i * 2 + 1]);
+      if (hi < 0 || lo < 0) { telemetryError(id.c_str(), "DATA"); clearTelemetry(); return; }
+      const uint8_t value = (hi << 4) | lo;
+      if (telemetryReceived < telemetryUrlLen) {
+        if (value == 0) { telemetryError(id.c_str(), "BAD_URL"); clearTelemetry(); return; }
+        telemetryUrl[telemetryReceived] = static_cast<char>(value);
+      } else telemetryJson[telemetryReceived - telemetryUrlLen] = value;
+      ++telemetryReceived;
+    }
+    telemetryLastChunk = millis();
+    usbPrint("TELEMETRY ACK " + id + " DATA");
+  } else if (command == "END" && second < 0) {
+    if (telemetryReceived != telemetryUrlLen + telemetryJsonLen) {
+      telemetryError(id.c_str(), "LENGTH"); clearTelemetry(); return;
+    }
+    telemetryUrl[telemetryUrlLen] = '\0';
+    telemetryState.store(TelemetryState::Working);
+    usbPrint("TELEMETRY ACK " + id + " END");
+    xTaskNotifyGive(telemetryTask);
+  } else {
+    telemetryError(id.c_str(), "FORMAT");
+    clearTelemetry();
+  }
+}
+
 void announceUsb() {
   usbPrint("HELLO ODK-BRIDGE");
   printState(dikey);
@@ -815,6 +1052,7 @@ void stopFridge(const char *reason) {
 void handleLine(String line) {
   line.trim();
   if (line.isEmpty()) return;
+  if (line.startsWith("TELEMETRY ")) { handleTelemetry(line); return; }
   if (line.equalsIgnoreCase("FRIDGE STATUS")) {
     fridgeHostMs = millis();
     printFridgeStatus();
@@ -900,6 +1138,8 @@ void setup() {
   serialMutex = xSemaphoreCreateMutex();
   discoveryMutex = xSemaphoreCreateMutex();
   configASSERT(serialMutex != nullptr && discoveryMutex != nullptr);
+  if (xTaskCreate(telemetryWorker, "telemetry", 8192, nullptr, 1, &telemetryTask) != pdPASS)
+    telemetryTask = nullptr;
   Serial.begin(115200);
   const uint32_t start = millis();
   while (!Serial && millis() - start < 2000) delay(10);
@@ -933,17 +1173,30 @@ void loop() {
   if (usbUp && !usbAnnounced) { announceUsb(); usbAnnounced = true; }
   else if (!usbUp && usbAnnounced) {
     usbAnnounced = false;
+    lineBuf = "";
+    lineOverflow = false;
     if (fridge.enabled) stopFridge("USB disconnected; waiting for BLE disconnect");
+    if (telemetryState.load() == TelemetryState::Receiving) clearTelemetry();
+  }
+  if (telemetryState.load() == TelemetryState::Receiving &&
+      millis() - telemetryLastChunk >= kTelemetryIdleMs) {
+    telemetryError(telemetryId, "TIMEOUT");
+    clearTelemetry();
   }
   for (size_t budget = 0; budget < 256 && Serial.available() > 0; ++budget) {
     const char c = static_cast<char>(Serial.read());
     if (c == '\n') {
       if (lineOverflow) {
-        String upper = lineBuf;
-        upper.trim();
-        upper.toUpperCase();
-        usbPrint(upper.startsWith("FRIDGE") ? "FRIDGE STATE ERROR input line too long" :
-                 "ERR input line too long");
+        if (telemetryState.load() == TelemetryState::Receiving && lineBuf.startsWith("TELEMETRY ")) {
+          telemetryError(telemetryId, "LINE_TOO_LONG");
+          clearTelemetry();
+        } else {
+          String upper = lineBuf;
+          upper.trim();
+          upper.toUpperCase();
+          usbPrint(upper.startsWith("FRIDGE") ? "FRIDGE STATE ERROR input line too long" :
+                   "ERR input line too long");
+        }
       } else handleLine(lineBuf);
       lineBuf = "";
       lineOverflow = false;

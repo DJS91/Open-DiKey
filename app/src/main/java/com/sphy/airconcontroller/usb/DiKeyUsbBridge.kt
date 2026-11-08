@@ -14,6 +14,7 @@ import com.sphy.airconcontroller.storage.AppSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.Channel
 
 /**
  * USB serial link to firmware/src/DiKeyUsbBridge. The C3 owns DiKey GATT;
@@ -40,6 +41,7 @@ class DiKeyUsbBridge(
     val wifiScan: StateFlow<WifiScan> = _wifiScan.asStateFlow()
     private val _wifiDiagnostics = MutableStateFlow<List<String>>(emptyList())
     val wifiDiagnostics: StateFlow<List<String>> = _wifiDiagnostics.asStateFlow()
+    val telemetryReplies = Channel<String>(64)
 
     private val main = Handler(Looper.getMainLooper())
     private val scanTimeout = Runnable {
@@ -220,6 +222,10 @@ class DiKeyUsbBridge(
     }
 
     private fun handleLine(line: String) {
+        if (line.startsWith("TELEMETRY ")) {
+            if (telemetryReplies.trySend(line).isFailure) Log.w(TAG, "Telemetry reply queue full")
+            return
+        }
         if (fridge.onLine(line, SystemClock.elapsedRealtime())) {
             Log.d(TAG, line)
             return

@@ -73,6 +73,31 @@ data class LedRestoreSnapshot(
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    var telemetryEnabled: Boolean
+        get() = prefs.getBoolean("telemetry_enabled", false)
+        set(value) { prefs.edit().putBoolean("telemetry_enabled", value).apply() }
+
+    var telemetryUrl: String
+        get() = prefs.getString("telemetry_url", "") ?: ""
+        set(value) { prefs.edit().putString("telemetry_url", value).apply() }
+
+    var telemetryIntervalSeconds: Int
+        get() = prefs.getInt("telemetry_interval_seconds", 5).coerceIn(5, 3600)
+        set(value) { prefs.edit().putInt("telemetry_interval_seconds", value).apply() }
+
+    var telemetryLocationEnabled: Boolean
+        get() = prefs.getBoolean("telemetry_location_enabled", false)
+        set(value) { prefs.edit().putBoolean("telemetry_location_enabled", value).apply() }
+
+    fun saveTelemetry(enabled: Boolean, url: String, intervalSeconds: Int, location: Boolean) {
+        prefs.edit()
+            .putBoolean("telemetry_enabled", enabled)
+            .putString("telemetry_url", url)
+            .putInt("telemetry_interval_seconds", intervalSeconds)
+            .putBoolean("telemetry_location_enabled", location)
+            .apply()
+    }
+
     var dikeyLastAddress: String?
         get() = prefs.getString(KEY_DIKEY_ADDRESS, null)
         set(value) {
