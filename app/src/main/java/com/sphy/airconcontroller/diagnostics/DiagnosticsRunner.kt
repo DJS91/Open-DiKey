@@ -883,6 +883,13 @@ class DiagnosticsRunner(
         kv("DiKey ready", session.isConnected)
         kv("USB bridge open", session.isUsbOpen)
         kv("USB bridge sees DiKey", session.usbBridge.isDikeyReady)
+        kv("ESP32 WiFi state", session.usbBridge.wifi.value.state)
+        val wifiDiagnostics = session.usbBridge.wifiDiagnostics.value
+        if (wifiDiagnostics.isEmpty()) {
+            line("ESP32 WiFi diagnostics: no details received (firmware update may be required)")
+        } else {
+            wifiDiagnostics.forEach { line("ESP32 WiFi: $it") }
+        }
         kv("Bluetooth permissions", session.hasBluetoothPermissions())
         kv("Selected BLE", session.selectedBle?.let { "${it.displayName} ${it.address}" })
         kv("Last saved BLE address", session.settings.dikeyLastAddress)

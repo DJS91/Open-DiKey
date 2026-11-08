@@ -73,8 +73,34 @@ FRIDGE POWERERR <reason>
 including partial ASCII frames: the host must assemble/decode them.
 Every output line is protected by a mutex, including notification callbacks;
 advertised names have control characters removed from their displayed form.
-USB input is limited to 200 characters; overlong lines are discarded through
+USB input is limited to 256 characters; overlong lines are discarded through
 LF, not executed as truncated commands.
+
+## WiFi
+
+The Android settings page can scan for visible 2.4 GHz networks and select an
+SSID; hidden networks are not listed. The ESP32-C3 does not support 5 GHz WiFi.
+The app stores the selected SSID and password and sends them to the bridge over
+USB; update both the app and firmware to use scanning. `WIFI SET <hex-ssid>
+<hex-password>` configures the station (`-` means no password), and `WIFI OFF`
+disconnects it. The bridge reports `WIFI STATE CONNECTED` only after a TCP
+connection to port 53 on Google DNS (8.8.8.8 or 8.8.4.4) succeeds; networks
+that block that test will not be marked connected even if WiFi association
+works. The bridge retries and periodically rechecks connectivity.
+
+`WIFI SCAN` starts an asynchronous scan and emits `WIFI SCAN START`,
+`WIFI SCAN RESULT <hex-ssid> <rssi-dBm> <auth-mode>` for each visible network,
+up to 256 scan records, and `WIFI SCAN END`, or `WIFI SCAN ERROR <reason>` on
+failure. The app accepts UTF-8 SSIDs, deduplicates by name, and shows up to 100
+networks, keeping the strongest record for each name.
+`WIFI STATUS` reports the current state and `WIFI DIAG` lines with the WiFi
+status and the last disconnect reason, if one was reported by the ESP32.
+Further `WIFI DIAG` lines report disconnect events, join timeouts, and
+individual DNS connectivity tests. Disconnect reason codes describe what the
+driver reported and do not always identify a unique cause. The app keeps
+recent diagnostic lines in **Debug → ESP32 WiFi diagnostics**, and includes
+them in the diagnostics report. Passwords are not included in these lines;
+SSID and password are sent as hex over USB, not encrypted.
 
 ## Discovery and read-only operation
 

@@ -5,7 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
+import kotlinx.coroutines.launch
 
 /** Debug probe menus behind the home bug icon. */
 class DebugHubActivity : OpenDiKeyActivity() {
@@ -16,6 +20,24 @@ class DebugHubActivity : OpenDiKeyActivity() {
         findViewById<android.widget.ImageButton>(R.id.debugBackButton).setOnClickListener {
             finish()
         }
+        val bridge = OpenDiKeyApp.from(this).dikey.usbBridge
+        val wifiDebug = findViewById<android.widget.TextView>(R.id.wifiDebugText)
+        findViewById<android.widget.Button>(R.id.wifiDebugRefreshButton).setOnClickListener {
+            if (!bridge.requestWifiStatus()) {
+                val message = if (bridge.isUsbOpen) R.string.wifi_debug_send_failed
+                else R.string.wifi_debug_usb_unavailable
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                bridge.wifiDiagnostics.collect { lines ->
+                    wifiDebug.text = lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                        ?: getString(R.string.wifi_debug_empty)
+                }
+            }
+        }
+        if (bridge.isUsbOpen) bridge.requestWifiStatus()
         findViewById<android.view.View>(R.id.openDiagnosticsButton).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }

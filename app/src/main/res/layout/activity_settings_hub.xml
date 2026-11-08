@@ -277,16 +277,27 @@
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                 android:textColor="@color/text_muted" />
 
-            <EditText
-                android:id="@+id/settingsWifiSsid"
+            <Button
+                android:id="@+id/settingsWifiScanButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:hint="@string/settings_wifi_ssid"
-                android:imeOptions="actionNext"
-                android:inputType="text"
-                android:maxLength="32"
-                android:maxLines="1" />
+                android:text="@string/wifi_scan_button" />
+
+            <TextView
+                android:id="@+id/settingsWifiScanStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/wifi_scan_initial"
+                android:textColor="@color/text_muted"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
+
+            <Button
+                android:id="@+id/settingsWifiSelectButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/wifi_select_network" />
 
             <EditText
                 android:id="@+id/settingsWifiPassword"
@@ -296,7 +307,9 @@
                 android:imeOptions="actionDone"
                 android:inputType="textPassword"
                 android:maxLength="63"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_muted" />
 
             <TextView
                 android:id="@+id/settingsWifiStatus"

@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <atomic>
 #include <ctype.h>
+#include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -532,6 +533,53 @@ String wifiSsid;
 String wifiPass;
 String wifiDetail;
 uint32_t wifiAt = 0;
+std::atomic<int> wifiDisconnectEvent{-1};
+std::atomic<bool> wifiAssociatedEvent{false};
+std::atomic<bool> wifiGotIpEvent{false};
+int lastWifiDisconnectReason = -1;
+bool wifiScanActive = false;
+bool wifiScanReconnect = false;
+uint32_t wifiScanAt = 0;
+const char *wifiStateName(WifiState s);
+
+const char *wifiStatusName(wl_status_t status) {
+  switch (status) {
+    case WL_IDLE_STATUS: return "idle";
+    case WL_NO_SSID_AVAIL: return "network not found";
+    case WL_SCAN_COMPLETED: return "scan completed";
+    case WL_CONNECTED: return "associated and has IP";
+    case WL_CONNECT_FAILED: return "connection failed";
+    case WL_CONNECTION_LOST: return "connection lost";
+    case WL_DISCONNECTED: return "disconnected";
+    default: return "unknown";
+  }
+}
+
+const char *wifiReasonName(int reason) {
+  switch (reason) {
+    case 2: return "authentication expired";
+    case 8: return "station left network";
+    case 15: return "4-way handshake timeout (check password or security mode)";
+    case 23: return "802.1X authentication failed";
+    case 201: return "network not found (check SSID, signal and 2.4 GHz)";
+    case 202: return "authentication failed (check password or security mode)";
+    case 203: return "association failed";
+    case 204: return "handshake timeout (check password or security mode)";
+    default: return WiFi.STA.disconnectReasonName(static_cast<wifi_err_reason_t>(reason));
+  }
+}
+
+void printWifiDiag() {
+  const wl_status_t status = WiFi.status();
+  usbPrint(String("WIFI DIAG state=") + wifiStateName(wifiState) +
+           " status=" + wifiStatusName(status) + " (" + String(static_cast<int>(status)) + ")");
+  if (lastWifiDisconnectReason >= 0) {
+    usbPrint(String("WIFI DIAG last disconnect reason=") + String(lastWifiDisconnectReason) +
+             " " + wifiReasonName(lastWifiDisconnectReason));
+  } else {
+    usbPrint("WIFI DIAG no disconnect reason reported");
+  }
+}
 
 const char *wifiStateName(WifiState s) {
   switch (s) {
@@ -557,12 +605,23 @@ void setWifiState(WifiState s, const String &detail = "") {
   if (changed) printWifi();
 }
 
+String displayWifiSsid() {
+  String name = wifiSsid;
+  for (size_t i = 0; i < name.length(); ++i) {
+    const uint8_t c = static_cast<uint8_t>(name[i]);
+    if (c < 32 || c == 127) name.setCharAt(i, '?');
+  }
+  return name;
+}
+
 // WiFi only counts as connected once a TCP connection to Google DNS succeeds.
 bool googleDnsReachable() {
   const IPAddress servers[] = {IPAddress(8, 8, 8, 8), IPAddress(8, 8, 4, 4)};
   for (const auto &ip : servers) {
     WiFiClient client;
-    if (client.connect(ip, 53, kDnsProbeTimeoutMs)) {
+    const bool reached = client.connect(ip, 53, kDnsProbeTimeoutMs);
+    usbPrint(String("WIFI DIAG TCP ") + ip.toString() + ":53 " + (reached ? "reachable" : "failed"));
+    if (reached) {
       client.stop();
       return true;
     }
@@ -572,11 +631,20 @@ bool googleDnsReachable() {
 
 void wifiBegin() {
   WiFi.disconnect();
-  WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
-  setWifiState(WifiState::Connecting, wifiSsid);
+  const wl_status_t initialStatus = WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+  setWifiState(WifiState::Connecting, displayWifiSsid());
+  usbPrint(String("WIFI DIAG joining 2.4 GHz network; begin status=") +
+           wifiStatusName(initialStatus) + " (" + String(static_cast<int>(initialStatus)) + ")");
 }
 
 void wifiStop() {
+  if (wifiScanActive) {
+    wifiScanActive = false;
+    wifiScanReconnect = false;
+    esp_wifi_scan_stop();
+    WiFi.scanDelete();
+    usbPrint("WIFI SCAN ERROR scan cancelled");
+  }
   wifiSsid = "";
   wifiPass = "";
   WiFi.disconnect(true);
@@ -590,7 +658,7 @@ bool decodeHexString(const String &hex, String &out) {
   for (size_t i = 0; i < hex.length(); i += 2) {
     const int hi = hexVal(hex[i]);
     const int lo = hexVal(hex[i + 1]);
-    if (hi < 0 || lo < 0) return false;
+    if (hi < 0 || lo < 0 || (hi == 0 && lo == 0)) return false;
     out += static_cast<char>((hi << 4) | lo);
   }
   return true;
@@ -603,7 +671,8 @@ void handleWifiSet(const String &args) {
   const String hexPass = sp < 0 ? "-" : args.substring(sp + 1);
   if (!decodeHexString(sp < 0 ? args : args.substring(0, sp), ssid) ||
       (hexPass != "-" && !decodeHexString(hexPass, pass)) ||
-      ssid.isEmpty() || ssid.length() > 32 || pass.length() > 63) {
+      ssid.isEmpty() || ssid.length() > 32 || pass.length() > 63 ||
+      (!pass.isEmpty() && pass.length() < 8)) {
     usbPrint("WIFI STATE FAILED invalid credentials");
     return;
   }
@@ -612,27 +681,108 @@ void handleWifiSet(const String &args) {
     printWifi();
     return;
   }
+  if (wifiScanActive) {
+    wifiScanActive = false;
+    wifiScanReconnect = false;
+    esp_wifi_scan_stop();
+    WiFi.scanDelete();
+    usbPrint("WIFI SCAN ERROR scan cancelled to connect");
+  }
   wifiSsid = ssid;
   wifiPass = pass;
+  lastWifiDisconnectReason = -1;
   WiFi.mode(WIFI_STA);
   wifiBegin();
 }
 
+void startWifiScan() {
+  if (wifiScanActive) {
+    usbPrint("WIFI SCAN ERROR scan already running");
+    return;
+  }
+  if (!WiFi.mode(WIFI_STA)) {
+    usbPrint("WIFI SCAN ERROR unable to enable WiFi");
+    return;
+  }
+  wifiScanReconnect = wifiState == WifiState::Connecting || wifiState == WifiState::Failed;
+  if (wifiScanReconnect) {
+    WiFi.disconnect();
+    usbPrint("WIFI DIAG paused connection attempts for WiFi scan");
+  }
+  WiFi.scanDelete();
+  const int result = WiFi.scanNetworks(true, false);
+  if (result != WIFI_SCAN_RUNNING && result < 0) {
+    usbPrint(String("WIFI SCAN ERROR scan start failed (") + result + ")");
+    if (wifiScanReconnect) wifiBegin();
+    else if (wifiState == WifiState::Off) WiFi.mode(WIFI_OFF);
+    wifiScanReconnect = false;
+    return;
+  }
+  wifiScanActive = true;
+  wifiScanAt = millis();
+  usbPrint("WIFI SCAN START");
+}
+
+void serviceWifiScan() {
+  if (!wifiScanActive) return;
+  const int count = WiFi.scanComplete();
+  if (count == WIFI_SCAN_RUNNING && millis() - wifiScanAt < 30000) return;
+  wifiScanActive = false;
+  if (count < 0) {
+    if (count == WIFI_SCAN_RUNNING) esp_wifi_scan_stop();
+    usbPrint(count == WIFI_SCAN_RUNNING ? "WIFI SCAN ERROR scan timed out" :
+             String("WIFI SCAN ERROR scan failed (") + count + ")");
+  } else {
+    constexpr char hex[] = "0123456789ABCDEF";
+    for (int i = 0; i < count && i < 256; ++i) {
+      const String ssid = WiFi.SSID(i);
+      if (ssid.isEmpty()) continue;
+      String line("WIFI SCAN RESULT ");
+      for (size_t j = 0; j < ssid.length(); ++j) {
+        const uint8_t c = static_cast<uint8_t>(ssid[j]);
+        line += hex[c >> 4];
+        line += hex[c & 15];
+      }
+      line += " " + String(WiFi.RSSI(i)) + " " + String(static_cast<int>(WiFi.encryptionType(i)));
+      usbPrint(line);
+    }
+    usbPrint("WIFI SCAN END");
+  }
+  WiFi.scanDelete();
+  if (wifiScanReconnect) wifiBegin();
+  else if (wifiState == WifiState::Off) WiFi.mode(WIFI_OFF);
+  wifiScanReconnect = false;
+}
+
 void serviceWifi() {
   const uint32_t now = millis();
+  if (wifiAssociatedEvent.exchange(false)) usbPrint("WIFI DIAG associated with access point; waiting for IP");
+  if (wifiGotIpEvent.exchange(false)) usbPrint("WIFI DIAG received IP address");
+  const int reason = wifiDisconnectEvent.exchange(-1);
+  if (reason >= 0) {
+    lastWifiDisconnectReason = reason;
+    usbPrint(String("WIFI DIAG disconnect reason=") + reason + " " + wifiReasonName(reason));
+  }
+  if (wifiScanActive) return;
   switch (wifiState) {
     case WifiState::Connecting:
       if (WiFi.status() == WL_CONNECTED) setWifiState(WifiState::Checking, "testing 8.8.8.8");
-      else if (now - wifiAt >= kWifiJoinTimeoutMs) setWifiState(WifiState::Failed, "could not join network");
+      else if (now - wifiAt >= kWifiJoinTimeoutMs) {
+        setWifiState(WifiState::Failed, String("join timed out; ") + wifiStatusName(WiFi.status()));
+        printWifiDiag();
+      }
       break;
     case WifiState::Checking:
-      if (googleDnsReachable()) setWifiState(WifiState::Connected, wifiSsid);
+      if (WiFi.status() == WL_CONNECTED && googleDnsReachable() && WiFi.status() == WL_CONNECTED)
+        setWifiState(WifiState::Connected, displayWifiSsid());
       else setWifiState(WifiState::Failed, "no internet (Google DNS unreachable)");
       break;
     case WifiState::Connected:
-      if (now - wifiAt >= kWifiRecheckMs) {
-        if (WiFi.status() != WL_CONNECTED) wifiBegin();
-        else if (!googleDnsReachable()) setWifiState(WifiState::Failed, "no internet (Google DNS unreachable)");
+      if (WiFi.status() != WL_CONNECTED) {
+        usbPrint("WIFI DIAG WiFi link lost; reconnecting");
+        wifiBegin();
+      } else if (now - wifiAt >= kWifiRecheckMs) {
+        if (!googleDnsReachable()) setWifiState(WifiState::Failed, "no internet (Google DNS unreachable)");
         else wifiAt = now;
       }
       break;
@@ -719,7 +869,8 @@ void handleLine(String line) {
   if (upper.startsWith("WIFI")) {
     if (upper.startsWith("WIFI SET ")) handleWifiSet(line.substring(9));
     else if (upper == "WIFI OFF") wifiStop();
-    else if (upper == "WIFI STATUS") printWifi();
+    else if (upper == "WIFI STATUS") { printWifi(); printWifiDiag(); }
+    else if (upper == "WIFI SCAN") startWifiScan();
     else usbPrint("WIFI STATE FAILED unsupported command");
     return;
   }
@@ -754,6 +905,15 @@ void setup() {
   while (!Serial && millis() - start < 2000) delay(10);
   lineBuf.reserve(kMaxLine);
   seenSinceMs = millis();
+  WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
+    wifiDisconnectEvent.store(info.wifi_sta_disconnected.reason);
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  WiFi.onEvent([](arduino_event_id_t) {
+    wifiAssociatedEvent.store(true);
+  }, ARDUINO_EVENT_WIFI_STA_CONNECTED);
+  WiFi.onEvent([](arduino_event_id_t) {
+    wifiGotIpEvent.store(true);
+  }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
   NimBLEDevice::init("ODK-Bridge");
   auto *scan = NimBLEDevice::getScan();
   scan->setScanCallbacks(&scanCallbacks, true);
@@ -798,6 +958,7 @@ void loop() {
   serviceEndpoint(dikey);
   serviceEndpoint(fridge);
   serviceWifi();
+  serviceWifiScan();
   if (diagScanActive && static_cast<int32_t>(millis() - diagScanUntil) >= 0) {
     diagScanActive = false;
     printDiag();

@@ -68,30 +68,85 @@ class SettingsHubActivity : OpenDiKeyActivity() {
 
     private fun setUpWifi(settings: AppSettings) {
         val bridge = OpenDiKeyApp.from(this).dikey.usbBridge
-        val ssidInput = findViewById<EditText>(R.id.settingsWifiSsid)
+        val selectButton = findViewById<Button>(R.id.settingsWifiSelectButton)
+        val scanButton = findViewById<Button>(R.id.settingsWifiScanButton)
+        val connectButton = findViewById<Button>(R.id.settingsWifiConnectButton)
+        val scanStatus = findViewById<TextView>(R.id.settingsWifiScanStatus)
         val passInput = findViewById<EditText>(R.id.settingsWifiPassword)
         val wifiStatus = findViewById<TextView>(R.id.settingsWifiStatus)
-        ssidInput.setText(settings.wifiSsid)
+        var selectedSsid = settings.wifiSsid
+        fun updateSelection() {
+            selectButton.text = if (selectedSsid.isEmpty()) getString(R.string.wifi_select_network)
+            else getString(R.string.wifi_selected_network, selectedSsid)
+        }
+        updateSelection()
         passInput.setText(settings.wifiPassword)
 
-        findViewById<Button>(R.id.settingsWifiConnectButton).setOnClickListener {
-            val ssid = ssidInput.text.toString().trim()
+        scanButton.setOnClickListener { bridge.scanWifi() }
+        selectButton.setOnClickListener {
+            val networks = bridge.wifiScan.value.networks
+            if (networks.isEmpty()) {
+                Toast.makeText(this, R.string.wifi_select_first, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val labels = networks.map {
+                getString(
+                    R.string.wifi_network_item, it.ssid, it.rssi,
+                    getString(if (it.secured) R.string.wifi_network_secured else R.string.wifi_network_open),
+                )
+            }.toTypedArray()
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.wifi_select_network)
+                .setItems(labels) { _, index ->
+                    val ssid = networks[index].ssid
+                    if (ssid != selectedSsid) passInput.setText("")
+                    selectedSsid = ssid
+                    updateSelection()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+        connectButton.setOnClickListener {
+            val ssid = selectedSsid
+            val password = passInput.text.toString()
             if (ssid.isEmpty()) {
-                ssidInput.error = getString(R.string.settings_wifi_ssid)
+                Toast.makeText(this, R.string.wifi_select_first, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if ((password.isNotEmpty() && password.toByteArray(Charsets.UTF_8).size !in 8..63) ||
+                '\u0000' in password
+            ) {
+                passInput.error = getString(R.string.wifi_invalid_password)
                 return@setOnClickListener
             }
             settings.wifiSsid = ssid
-            settings.wifiPassword = passInput.text.toString()
+            settings.wifiPassword = password
             bridge.sendWifiConfig()
         }
         findViewById<Button>(R.id.settingsWifiForgetButton).setOnClickListener {
             settings.wifiSsid = ""
             settings.wifiPassword = ""
-            ssidInput.setText("")
+            selectedSsid = ""
+            updateSelection()
             passInput.setText("")
             bridge.sendWifiConfig()
         }
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                bridge.wifiScan.collect { scan ->
+                    scanButton.isEnabled = !scan.scanning
+                    connectButton.isEnabled = !scan.scanning
+                    scanStatus.text = when {
+                        scan.scanning -> getString(R.string.wifi_scan_running)
+                        scan.error != null -> getString(R.string.wifi_scan_failed, scan.error)
+                        scan.networks.isNotEmpty() -> getString(R.string.wifi_scan_found, scan.networks.size)
+                        !scan.attempted -> getString(R.string.wifi_scan_initial)
+                        else -> getString(R.string.wifi_scan_empty)
+                    }
+                }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 bridge.wifi.collect { wifi ->
