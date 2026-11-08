@@ -52,13 +52,22 @@
         android:paddingEnd="20dp"
         android:paddingBottom="24dp">
 
+        <Button
+            android:id="@+id/wifiDebugToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="@string/wifi_debug_show" />
+
         <LinearLayout
+            android:id="@+id/wifiDebugDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
             android:background="@drawable/bg_feature_tile"
             android:orientation="vertical"
-            android:padding="24dp">
+            android:padding="24dp"
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="match_parent"

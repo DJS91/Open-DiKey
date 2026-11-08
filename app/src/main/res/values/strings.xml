@@ -30,6 +30,8 @@
   <string name="settings_check_updates">Check for updates</string>
   <string name="wifi_state_connected">Wifi Connected</string>
   <string name="wifi_debug_title">ESP32 WiFi diagnostics</string>
+  <string name="wifi_debug_show">Show ESP32 WiFi diagnostics</string>
+  <string name="wifi_debug_hide">Hide ESP32 WiFi diagnostics</string>
   <string name="wifi_debug_empty">No WiFi diagnostics received. Connect the ESP32 and update its firmware to enable detailed diagnostics.</string>
   <string name="wifi_debug_refresh">Refresh WiFi diagnostics</string>
   <string name="wifi_debug_usb_unavailable">Cannot request diagnostics: the ESP32 USB bridge is not connected.</string>
