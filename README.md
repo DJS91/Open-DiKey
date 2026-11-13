@@ -70,7 +70,7 @@ Open DiKey once after each cold boot or deep sleep. A foreground listener then k
 
 **Button mapping** — Down click keeps climate (as printed) unless remapped. Down long, up, and up long can open apps or run Android Intents (activity / broadcast).
 
-**Dials** — Left dial = passenger, right dial = driver. Click to switch between **temp** and **fan**, rotate to adjust.
+**Dials** — Left dial = passenger, right dial = driver. Click to switch between **temp** and **fan**, rotate to adjust. Each dial returns to temperature after 3 seconds without a turn in fan mode.
 
 **Vehicle info** — Live dashboard for battery, range, fuel, driving data, tyre pressures, vehicle attitude, and head-unit resource usage.
 

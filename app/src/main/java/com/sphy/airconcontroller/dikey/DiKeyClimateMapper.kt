@@ -8,7 +8,8 @@ import java.util.concurrent.Executors
 
 /**
  * Pushing a DiKey button downwards (click) → vehicle climate (fixed).
- * Dial click toggles temp / fan on that side (fixed). Dial long-press and
+ * Dial click toggles temp / fan on that side (fixed); fan returns to temp after
+ * three seconds without a turn. Dial long-press and
  * other remappable presses are handled by [DiKeyUpMapper]. Rotate writes the value.
  *
  * While the key is connected, car-side climate changes are mirrored back onto the
@@ -23,6 +24,11 @@ class DiKeyClimateMapper(
 ) {
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
+    private val fanTimeout = FanDisplayTimeout(
+        schedule = { task, delay -> main.postDelayed(task, delay) },
+        cancel = { task -> main.removeCallbacks(task) },
+        onTimeout = { left -> returnToTemperature(left) },
+    )
 
     private var leftMode = DialMode.TEMP
     private var rightMode = DialMode.TEMP
@@ -66,12 +72,15 @@ class DiKeyClimateMapper(
     fun setPaused(value: Boolean) {
         if (paused == value) return
         paused = value
-        if (!value) {
+        if (value) {
+            fanTimeout.cancelAll()
+        } else {
             // Forget what we think is on the LCDs so the next poll repaints them from the car.
             shownLeft = null
             shownRight = null
             wakingLeft = false
             wakingRight = false
+            restartFanTimeouts()
             if (polling) pollCar()
         }
     }
@@ -87,6 +96,7 @@ class DiKeyClimateMapper(
         shownRight = null
         wakingLeft = false
         wakingRight = false
+        if (!paused) restartFanTimeouts()
         if (polling) {
             pollCar()
             return
@@ -98,6 +108,7 @@ class DiKeyClimateMapper(
     fun stopSync() {
         polling = false
         main.removeCallbacks(pollTask)
+        fanTimeout.cancelAll()
         shownLeft = null
         shownRight = null
         wakingLeft = false
@@ -154,8 +165,10 @@ class DiKeyClimateMapper(
             cycleDialMode(left)
             return
         }
+        val turning = event.event == "ROTATE_RIGHT" || event.event == "ROTATE_LEFT"
+        if (turning && modeOf(left) == DialMode.FAN) fanTimeout.reset(left)
         if (isBlanked(left)) {
-            if (event.event == "ROTATE_RIGHT" || event.event == "ROTATE_LEFT") {
+            if (turning) {
                 val shownMode = DialMode.fromDisplayType(event.displayType)
                 val dial = if (shownMode == modeOf(left)) DialTarget(event.displayType, event.value) else null
                 powerOnFromDial(left, dial, "turned")
@@ -168,11 +181,11 @@ class DiKeyClimateMapper(
                 setShown(left, DialTarget(event.displayType, event.value))
                 val inferred = DialMode.fromDisplayType(event.displayType) ?: return
                 lastLocalInputAt = SystemClock.elapsedRealtime()
-                if (left) leftMode = inferred else rightMode = inferred
+                setMode(left, inferred, resetTimeout = true)
                 applyDialValue(left, event.value)
             }
             else -> DialMode.fromDisplayType(event.displayType)?.let { inferred ->
-                if (left) leftMode = inferred else rightMode = inferred
+                if (inferred != modeOf(left)) setMode(left, inferred, resetTimeout = true)
             }
         }
     }
@@ -210,9 +223,14 @@ class DiKeyClimateMapper(
                 val (target, dialLeft) = pending
                 val value = DialDisplayType.fromCode(target.displayType)?.clamp(target.value) ?: target.value
                 lastLocalInputAt = SystemClock.elapsedRealtime()
-                setShown(dialLeft, DialTarget(target.displayType, value))
                 setWaking(dialLeft, false)
-                applyDialValue(dialLeft, value)
+                val targetMode = DialMode.fromDisplayType(target.displayType)
+                if (targetMode == modeOf(dialLeft)) {
+                    setShown(dialLeft, DialTarget(target.displayType, value))
+                } else {
+                    refreshSide(dialLeft)
+                }
+                if (targetMode != null) applyDialValue(dialLeft, value, targetMode)
                 refreshSide(!dialLeft)
             }
         }
@@ -231,20 +249,34 @@ class DiKeyClimateMapper(
 
     private fun cycleDialMode(left: Boolean) {
         val next = modeOf(left).next()
-        if (left) leftMode = next else rightMode = next
+        setMode(left, next, resetTimeout = true)
         if (isBlanked(left)) {
             powerOnFromDial(left, dial = null, action = "clicked")
             return
         }
         setWaking(left, false)
         setShown(left, null)
+        showMode(left, next)
+    }
+
+    private fun returnToTemperature(left: Boolean) {
+        if (paused || !polling || !dikey.isConnected || modeOf(left) != DialMode.FAN) return
+        setMode(left, DialMode.TEMP, resetTimeout = false)
+        if (isBlanked(left) || wakingOf(left)) return
+        setShown(left, null)
+        showMode(left, DialMode.TEMP)
+    }
+
+    private fun showMode(left: Boolean, mode: DialMode) {
         io.execute {
             val state = readState()
             main.post {
-                if (state != null) {
+                if (paused || !dikey.isConnected || modeOf(left) != mode || shownOf(left) != null) return@post
+                if (state != null && targetFor(left, state) != null) {
                     pushSide(left, state)
                 } else {
-                    val type = displayType(left, next)
+                    val type = displayType(left, mode)
+                    onLog("Climate · ${if (left) "LEFT" else "RIGHT"} dial · ${type.label} unavailable; using default")
                     setShown(left, DialTarget(type.code, type.defaultValue))
                     dikey.sendDialDisplay(left, type.code, type.defaultValue)
                 }
@@ -252,8 +284,8 @@ class DiKeyClimateMapper(
         }
     }
 
-    private fun applyDialValue(left: Boolean, value: Int) {
-        when (modeOf(left)) {
+    private fun applyDialValue(left: Boolean, value: Int, mode: DialMode = modeOf(left)) {
+        when (mode) {
             DialMode.TEMP -> io.execute {
                 ac.bind()
                 val temp = value.coerceIn(BydAcController.TEMP_MIN, BydAcController.TEMP_MAX)
@@ -329,6 +361,17 @@ class DiKeyClimateMapper(
     }
 
     private fun modeOf(left: Boolean): DialMode = if (left) leftMode else rightMode
+
+    private fun setMode(left: Boolean, mode: DialMode, resetTimeout: Boolean) {
+        if (left) leftMode = mode else rightMode = mode
+        if (mode == DialMode.FAN && resetTimeout) fanTimeout.reset(left)
+        if (mode == DialMode.TEMP) fanTimeout.cancel(left)
+    }
+
+    private fun restartFanTimeouts() {
+        if (leftMode == DialMode.FAN) fanTimeout.reset(true)
+        if (rightMode == DialMode.FAN) fanTimeout.reset(false)
+    }
 
     private fun shownOf(left: Boolean): DialTarget? = if (left) shownLeft else shownRight
 
